@@ -1,80 +1,294 @@
 ---
-title: "Quickstart"
-description: "Start building awesome documentation in minutes"
+title: Quick Start
+description: Get Sparklytics up and running in 5 minutes and track your first pageview
 ---
 
-## Get started in three steps
+Get Sparklytics deployed and tracking your first website in under 5 minutes.
 
-Get your documentation site running locally and make your first customization.
+## What you'll accomplish
 
-### Step 1: Set up your local environment
+<Steps>
+  <Step title="Deploy Sparklytics">
+    Start Sparklytics on your server using Docker
+  </Step>
+  <Step title="Create your account">
+    Complete the one-time setup and create your admin account
+  </Step>
+  <Step title="Add your website">
+    Register your first website in the dashboard
+  </Step>
+  <Step title="Install tracking">
+    Add the tracking script to your website
+  </Step>
+</Steps>
 
-<AccordionGroup>
-  <Accordion icon="copy" title="Clone your docs locally">
-    During the onboarding process, you created a GitHub repository with your docs content if you didn't already have one. You can find a link to this repository in your [dashboard](https://dashboard.mintlify.com).
-    
-    To clone the repository locally so that you can make and preview changes to your docs, follow the [Cloning a repository](https://docs.github.com/en/repositories/creating-and-managing-repositories/cloning-a-repository) guide in the GitHub docs.
-  </Accordion>
-  <Accordion icon="rectangle-terminal" title="Start the preview server">
-    1. Install the Mintlify CLI: `npm i -g mint`
-    2. Navigate to your docs directory and run: `mint dev`
-    3. Open `http://localhost:3000` to see your docs live!
-    
-    <Tip>Your preview updates automatically as you edit files.</Tip>
-  </Accordion>
-</AccordionGroup>
+## Deploy Sparklytics
 
-### Step 2: Deploy your changes
+<Tabs>
+  <Tab title="Docker Compose (Recommended)">
+    Download the docker-compose configuration and start Sparklytics:
 
-<AccordionGroup>
-  <Accordion icon="github" title="Install our GitHub app">
-    Install the Mintlify GitHub app from your [dashboard](https://dashboard.mintlify.com/settings/organization/github-app).
-    
-    Our GitHub app automatically deploys your changes to your docs site, so you don't need to manage deployments yourself.
-</Accordion>
-<Accordion icon="palette" title="Update your site name and colors">
-    For a first change, let's update the name and colors of your docs site.
+    ```bash
+    curl -O https://raw.githubusercontent.com/Sparklytics/sparklytics/main/docker-compose.yml
+    docker compose up -d
+    ```
 
-    1. Open `docs.json` in your editor.
-    2. Change the `"name"` field to your project name.
-    3. Update the `"colors"` to match your brand.
-    4. Save and see your changes instantly at `http://localhost:3000`.
+    Sparklytics will be available at `http://your-server-ip:3000`.
+  </Tab>
 
-    <Tip>Try changing the primary color to see an immediate difference!</Tip>
-  </Accordion>
-</AccordionGroup>
+  <Tab title="Docker Run">
+    Run Sparklytics as a single container:
 
-### Step 3: Go live
-
-<Accordion icon="rocket" title="Publish your docs">
-  1. Commit and push your changes.
-  2. Your docs will update and be live in moments!
-</Accordion>
-
-## Next steps
-
-Now that you have your docs running, explore these key features:
-
-<CardGroup cols={2}>
-
-<Card title="Write Content" icon="pen-to-square" href="/essentials/markdown">
-  Learn MDX syntax and start writing your documentation.
-</Card>
-
-<Card title="Customize style" icon="palette" href="/essentials/settings">
-  Make your docs match your brand perfectly.
-</Card>
-
-<Card title="Add code examples" icon="square-code" href="/essentials/code">
-  Include syntax-highlighted code blocks.
-</Card>
-
-<Card title="API documentation" icon="code" href="/api-reference/introduction">
-  Auto-generate API docs from OpenAPI specs.
-</Card>
-
-</CardGroup>
+    ```bash
+    docker run -d \
+      -p 3000:3000 \
+      -v sparklytics-data:/data \
+      -e SPARKLYTICS_AUTH=local \
+      sparklytics/sparklytics:latest
+    ```
+  </Tab>
+</Tabs>
 
 <Note>
-  **Need help?** See our [full documentation](https://mintlify.com/docs) or join our [community](https://mintlify.com/community).
+  If you're running Sparklytics locally over plain HTTP (not HTTPS), set `SPARKLYTICS_HTTPS=false` in your environment variables. See [HTTPS Setup](/self-hosting/https-setup) for production deployment.
+</Note>
+
+## Complete first-run setup
+
+1. Open `http://your-server-ip:3000` in your browser
+2. You'll be redirected to the setup page
+3. Create your admin account:
+   - **Email**: Your admin email
+   - **Password**: Choose a strong password (min 8 characters)
+4. Click **Create Account**
+
+You'll be automatically logged in and redirected to the dashboard.
+
+<Tip>
+  By default, Sparklytics uses "local" authentication mode. Your credentials are stored securely with Argon2id password hashing. See [Authentication](/configuration/authentication) for other auth modes.
+</Tip>
+
+## Add your first website
+
+<Steps>
+  <Step title="Navigate to websites">
+    From the dashboard, click **Websites** in the sidebar or click **+ New Website**.
+  </Step>
+
+  <Step title="Fill in website details">
+    - **Name**: A friendly name (e.g., "My Blog")
+    - **Domain**: Your website domain (e.g., `myblog.com`)
+    - **Timezone**: Your preferred timezone for date ranges
+  </Step>
+
+  <Step title="Create the website">
+    Click **Create Website**. You'll see your new website in the list with a generated **Website ID** (format: `site_XXXXXXXXXX`).
+  </Step>
+</Steps>
+
+## Install tracking
+
+Choose the integration method that fits your stack:
+
+<Tabs>
+  <Tab title="HTML Snippet">
+    Add this script tag before the closing `</body>` tag on every page you want to track:
+
+    ```html
+    <!-- Add before </body> -->
+    <script 
+      defer 
+      src="https://your-analytics-domain.com/s.js" 
+      data-website-id="site_XXXXXXXXXX">
+    </script>
+    ```
+
+    Replace:
+    - `your-analytics-domain.com` with your Sparklytics instance domain
+    - `site_XXXXXXXXXX` with your actual Website ID from step 3
+
+    **That's it!** Pageviews will appear in your dashboard within seconds.
+  </Tab>
+
+  <Tab title="Next.js SDK">
+    Install the Next.js SDK:
+
+    <CodeGroup>
+    ```bash npm
+    npm install @sparklytics/next
+    ```
+
+    ```bash yarn
+    yarn add @sparklytics/next
+    ```
+
+    ```bash pnpm
+    pnpm add @sparklytics/next
+    ```
+    </CodeGroup>
+
+    Add the provider to your layout:
+
+    ```tsx app/layout.tsx
+    import { SparklyticsProvider } from '@sparklytics/next'
+
+    export default function RootLayout({ children }) {
+      return (
+        <html>
+          <body>
+            <SparklyticsProvider
+              host="https://your-analytics-domain.com"
+              websiteId="site_XXXXXXXXXX"
+            >
+              {children}
+            </SparklyticsProvider>
+          </body>
+        </html>
+      )
+    }
+    ```
+
+    Pageviews are tracked automatically on every route change (App Router and Pages Router both supported).
+  </Tab>
+</Tabs>
+
+## Verify tracking is working
+
+<Steps>
+  <Step title="Visit your website">
+    Open your website in a browser (in a different tab/window from your Sparklytics dashboard).
+  </Step>
+
+  <Step title="Check the dashboard">
+    Return to your Sparklytics dashboard. Within a few seconds, you should see:
+    - **1 active visitor** in the real-time panel
+    - **1 pageview** in the stats overview
+    - Your recent pageview in the "Recent Events" list
+  </Step>
+
+  <Step title="Verify the event">
+    The recent event should show:
+    - Correct page URL
+    - Your location (country/city from GeoIP)
+    - Browser and device information
+  </Step>
+</Steps>
+
+<Tip>
+  Events are buffered for 5 seconds before being written to the database. If you don't see your event immediately, wait a few seconds and refresh the dashboard.
+</Tip>
+
+## Track custom events
+
+Beyond pageviews, you can track custom user actions:
+
+<Tabs>
+  <Tab title="HTML Snippet">
+    ```javascript
+    // Track a button click
+    document.getElementById('signup-btn').addEventListener('click', () => {
+      window.sparklytics?.track('signup_click', { plan: 'pro' })
+    })
+
+    // Track with properties
+    window.sparklytics?.track('purchase', {
+      product: 'Pro Plan',
+      amount: 29.99,
+      currency: 'USD'
+    })
+    ```
+  </Tab>
+
+  <Tab title="Next.js SDK">
+    ```tsx
+    'use client'
+    import { useSparklytics } from '@sparklytics/next'
+
+    export function SignupButton() {
+      const { track } = useSparklytics()
+      
+      return (
+        <button onClick={() => track('signup_click', { plan: 'pro' })}>
+          Get started
+        </button>
+      )
+    }
+    ```
+  </Tab>
+</Tabs>
+
+Custom events appear in the dashboard under **Events** and can be used in funnels, retention analysis, and journey tracking.
+
+## What's next?
+
+<CardGroup cols={2}>
+  <Card title="Custom Events" icon="bolt" href="/features/custom-events">
+    Track user actions beyond pageviews
+  </Card>
+  <Card title="Funnels" icon="filter" href="/features/funnels">
+    Measure conversion rates through multi-step journeys
+  </Card>
+  <Card title="Retention" icon="chart-line" href="/features/retention">
+    Analyze cohort retention over time
+  </Card>
+  <Card title="API Reference" icon="code" href="/api/overview">
+    Explore the analytics API
+  </Card>
+</CardGroup>
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="No events appearing in dashboard">
+    **Check these common issues:**
+
+    1. **Verify the tracking script is loaded**
+       - Open browser DevTools → Network tab
+       - Look for a request to `/s.js`
+       - Check for a POST request to `/api/collect`
+
+    2. **Check the Website ID**
+       - Ensure `data-website-id` matches your actual Website ID from the dashboard
+       - Website IDs start with `site_`
+
+    3. **CORS / Mixed Content**
+       - If your site is HTTPS, your analytics server must also be HTTPS
+       - Check browser console for CORS or mixed content errors
+
+    4. **Ad blockers**
+       - Some ad blockers block analytics scripts
+       - Test in an incognito window or with ad blockers disabled
+  </Accordion>
+
+  <Accordion title="Setup page keeps redirecting">
+    If you're stuck in a redirect loop:
+
+    1. Check that `SPARKLYTICS_AUTH=local` is set
+    2. Delete the data volume and restart:
+       ```bash
+       docker compose down -v
+       docker compose up -d
+       ```
+    3. Access the setup page at `http://your-server-ip:3000/setup`
+  </Accordion>
+
+  <Accordion title="Can't login after setup">
+    **Common issues:**
+
+    1. **HTTPS cookie issues**
+       - If running locally over HTTP, set `SPARKLYTICS_HTTPS=false`
+       - The Secure cookie flag requires HTTPS in production
+
+    2. **Wrong auth mode**
+       - Verify `SPARKLYTICS_AUTH=local` in your environment
+       - If using `password` mode, use `SPARKLYTICS_PASSWORD` instead
+
+    3. **Clear browser data**
+       - Clear cookies for the Sparklytics domain
+       - Try in an incognito window
+  </Accordion>
+</AccordionGroup>
+
+<Note>
+  For more detailed installation options, see the [Installation Guide](/installation). For production deployments, review the [Docker Deployment](/self-hosting/docker-deployment) and [HTTPS Setup](/self-hosting/https-setup) guides.
 </Note>

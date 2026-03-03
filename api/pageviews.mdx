@@ -1,0 +1,248 @@
+---
+title: 'Get Pageviews Time Series'
+api: 'GET /api/websites/:id/pageviews'
+description: 'Retrieve time series data showing pageviews and visitors over time with configurable granularity.'
+---
+
+## Path Parameters
+
+<ParamField path="id" type="string" required>
+  Website ID
+</ParamField>
+
+## Query Parameters
+
+<ParamField query="start_date" type="string">
+  Start date in `YYYY-MM-DD` format. Defaults to 6 days ago if not provided.
+</ParamField>
+
+<ParamField query="end_date" type="string">
+  End date in `YYYY-MM-DD` format. Defaults to today if not provided.
+</ParamField>
+
+<ParamField query="granularity" type="string">
+  Time series granularity: `hour`, `day`, `week`, or `month`. Automatically determined based on date range if not specified.
+</ParamField>
+
+<ParamField query="timezone" type="string">
+  IANA timezone string (e.g., `America/New_York`). Defaults to UTC.
+</ParamField>
+
+<ParamField query="include_bots" type="boolean">
+  Whether to include bot traffic in results. Defaults to website's bot policy setting.
+</ParamField>
+
+### Comparison Parameters
+
+<ParamField query="compare_mode" type="string">
+  Comparison mode: `none`, `previous_period`, `previous_year`, or `custom`.
+</ParamField>
+
+<ParamField query="compare_start_date" type="string">
+  Custom comparison start date (required when `compare_mode=custom`).
+</ParamField>
+
+<ParamField query="compare_end_date" type="string">
+  Custom comparison end date (required when `compare_mode=custom`).
+</ParamField>
+
+### Filter Parameters
+
+<ParamField query="filter_country" type="string">
+  ISO 3166-1 alpha-2 country code (e.g., `US`, `GB`).
+</ParamField>
+
+<ParamField query="filter_page" type="string">
+  Filter by page URL path.
+</ParamField>
+
+<ParamField query="filter_referrer" type="string">
+  Filter by referrer domain.
+</ParamField>
+
+<ParamField query="filter_browser" type="string">
+  Filter by browser name.
+</ParamField>
+
+<ParamField query="filter_os" type="string">
+  Filter by operating system.
+</ParamField>
+
+<ParamField query="filter_device" type="string">
+  Filter by device type.
+</ParamField>
+
+<ParamField query="filter_language" type="string">
+  Filter by browser language.
+</ParamField>
+
+<ParamField query="filter_utm_source" type="string">
+  Filter by UTM source parameter.
+</ParamField>
+
+<ParamField query="filter_utm_medium" type="string">
+  Filter by UTM medium parameter.
+</ParamField>
+
+<ParamField query="filter_utm_campaign" type="string">
+  Filter by UTM campaign parameter.
+</ParamField>
+
+<ParamField query="filter_region" type="string">
+  Filter by geographic region/state.
+</ParamField>
+
+<ParamField query="filter_city" type="string">
+  Filter by city name.
+</ParamField>
+
+<ParamField query="filter_hostname" type="string">
+  Filter by hostname.
+</ParamField>
+
+## Response
+
+<ResponseField name="data" type="object">
+  Time series data for the requested period.
+
+  <ResponseField name="series" type="array">
+    Array of time series data points.
+
+    <ResponseField name="date" type="string">
+      Date/time for this data point in ISO 8601 format.
+    </ResponseField>
+
+    <ResponseField name="pageviews" type="integer">
+      Number of pageviews in this time bucket.
+    </ResponseField>
+
+    <ResponseField name="visitors" type="integer">
+      Number of unique visitors in this time bucket.
+    </ResponseField>
+  </ResponseField>
+
+  <ResponseField name="granularity" type="string">
+    The granularity used for the time series (`hour`, `day`, `week`, or `month`).
+  </ResponseField>
+
+  <ResponseField name="compare_series" type="array">
+    Comparison period time series (only present when `compare_mode` is set). Same structure as `series`.
+  </ResponseField>
+</ResponseField>
+
+<ResponseField name="compare" type="object">
+  Comparison metadata (only present when `compare_mode` is set).
+
+  <ResponseField name="mode" type="string">
+    The comparison mode used.
+  </ResponseField>
+
+  <ResponseField name="primary_range" type="array">
+    Two-element array with start and end dates of the primary period.
+  </ResponseField>
+
+  <ResponseField name="comparison_range" type="array">
+    Two-element array with start and end dates of the comparison period.
+  </ResponseField>
+</ResponseField>
+
+## Example Request
+
+```bash
+curl -X GET "https://analytics.example.com/api/websites/abc123/pageviews?start_date=2024-03-01&end_date=2024-03-07&granularity=day" \
+  -H "Authorization: Bearer spk_live_your_api_key"
+```
+
+## Example Response
+
+```json
+{
+  "data": {
+    "series": [
+      {
+        "date": "2024-03-01",
+        "pageviews": 1823,
+        "visitors": 542
+      },
+      {
+        "date": "2024-03-02",
+        "pageviews": 1654,
+        "visitors": 489
+      },
+      {
+        "date": "2024-03-03",
+        "pageviews": 1891,
+        "visitors": 571
+      },
+      {
+        "date": "2024-03-04",
+        "pageviews": 2103,
+        "visitors": 623
+      },
+      {
+        "date": "2024-03-05",
+        "pageviews": 1987,
+        "visitors": 602
+      },
+      {
+        "date": "2024-03-06",
+        "pageviews": 1742,
+        "visitors": 521
+      },
+      {
+        "date": "2024-03-07",
+        "pageviews": 1343,
+        "visitors": 543
+      }
+    ],
+    "granularity": "day",
+    "compare_series": null
+  }
+}
+```
+
+## Example with Comparison
+
+```bash
+curl -X GET "https://analytics.example.com/api/websites/abc123/pageviews?start_date=2024-03-01&end_date=2024-03-07&granularity=day&compare_mode=previous_period" \
+  -H "Authorization: Bearer spk_live_your_api_key"
+```
+
+```json
+{
+  "data": {
+    "series": [
+      { "date": "2024-03-01", "pageviews": 1823, "visitors": 542 },
+      { "date": "2024-03-02", "pageviews": 1654, "visitors": 489 },
+      { "date": "2024-03-03", "pageviews": 1891, "visitors": 571 },
+      { "date": "2024-03-04", "pageviews": 2103, "visitors": 623 },
+      { "date": "2024-03-05", "pageviews": 1987, "visitors": 602 },
+      { "date": "2024-03-06", "pageviews": 1742, "visitors": 521 },
+      { "date": "2024-03-07", "pageviews": 1343, "visitors": 543 }
+    ],
+    "granularity": "day",
+    "compare_series": [
+      { "date": "2024-02-23", "pageviews": 1542, "visitors": 461 },
+      { "date": "2024-02-24", "pageviews": 1389, "visitors": 412 },
+      { "date": "2024-02-25", "pageviews": 1621, "visitors": 498 },
+      { "date": "2024-02-26", "pageviews": 1812, "visitors": 537 },
+      { "date": "2024-02-27", "pageviews": 1723, "visitors": 523 },
+      { "date": "2024-02-28", "pageviews": 1501, "visitors": 449 },
+      { "date": "2024-02-29", "pageviews": 1646, "visitors": 521 }
+    ]
+  },
+  "compare": {
+    "mode": "previous_period",
+    "primary_range": ["2024-03-01", "2024-03-07"],
+    "comparison_range": ["2024-02-23", "2024-02-29"]
+  }
+}
+```
+
+## Notes
+
+- Granularity is automatically selected based on date range if not specified
+- Hour granularity is best for 1-2 day ranges
+- Day granularity is best for weekly/monthly ranges
+- Week and month granularities are best for longer ranges
+- Time series data points are aligned to the start of each time bucket

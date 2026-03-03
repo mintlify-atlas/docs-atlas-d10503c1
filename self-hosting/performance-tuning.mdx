@@ -1,0 +1,522 @@
+---
+title: 'Performance Tuning'
+description: 'Optimize Sparklytics for high-traffic deployments and scale efficiently'
+---
+
+Sparklytics is designed to handle high traffic with minimal resources. This guide covers optimization strategies for production deployments.
+
+## Performance Benchmarks
+
+Measured on Apple Silicon macOS, release builds, 100k–1M realistic events. Full methodology: [docs/perf-baseline.md](https://github.com/Sparklytics/sparklytics/blob/main/docs/perf-baseline.md)
+
+### Self-Hosted (DuckDB)
+
+| Metric | Value |
+|--------|-------|
+| Peak ingest throughput | ~26,000 req/s (single event) |
+| Batch ingestion | ~74,800 events/s (batch of 10) |
+| Ingestion p99 latency (800 req/s) | 1.14 ms |
+| Memory (idle) | **~29 MB** |
+| Memory (under load) | ~64 MB |
+| Storage per 1M events | ~278 MB |
+| Binary size (linux-amd64 musl) | ~15 MB |
+
+### Scaling: 100k → 1M Events
+
+| Dimension | DuckDB Performance |
+|-----------|-----------|
+| Query degradation | 3.5–5x slower per 10x data |
+| Ingest degradation | Drops 59% (26k→11k req/s) |
+| Memory (query peak) | 407 MB → 3.5 GB |
+| Storage efficiency | 278 MB per 1M events |
+
+<Info>
+  For deployments expecting **&gt;10M events/month** or **&gt;500 concurrent dashboard users**, consider the cloud version with ClickHouse for 10–239x faster queries.
+</Info>
+
+## DuckDB Memory Configuration
+
+The `SPARKLYTICS_DUCKDB_MEMORY` environment variable controls query memory allocation.
+
+### Default Configuration
+
+```yaml
+environment:
+  - SPARKLYTICS_DUCKDB_MEMORY=1GB
+```
+
+This is safe for VPS instances with 2–4 GB total RAM.
+
+### Recommended by Server Size
+
+| Server RAM | Recommended Setting | Use Case |
+|------------|---------------------|----------|
+| 2 GB | `512MB` | Small sites, &lt;100k events/month |
+| 4 GB | `1GB` (default) | Medium sites, &lt;1M events/month |
+| 8 GB | `2GB` | Growing sites, 1–5M events/month |
+| 16 GB | `4GB` | High traffic, 5–10M events/month |
+| 32 GB+ | `8GB` | Very high traffic, &gt;10M events/month |
+
+### Configuration
+
+<CodeGroup>
+```yaml Docker Compose
+services:
+  sparklytics:
+    environment:
+      - SPARKLYTICS_DUCKDB_MEMORY=4GB
+```
+
+```bash Docker Run
+docker run -d \
+  -e SPARKLYTICS_DUCKDB_MEMORY=4GB \
+  sparklytics/sparklytics:latest
+```
+
+```bash Binary
+SPARKLYTICS_DUCKDB_MEMORY=4GB ./sparklytics
+```
+</CodeGroup>
+
+<Warning>
+  Do not set this higher than 50% of available system RAM. DuckDB also uses memory outside this limit for internal operations.
+</Warning>
+
+## Data Retention
+
+Longer retention periods increase database size and slow down queries.
+
+### Configure Retention
+
+```yaml
+environment:
+  - SPARKLYTICS_RETENTION_DAYS=365  # Default: 1 year
+```
+
+Recommended settings:
+
+| Traffic Level | Recommended Retention |
+|---------------|----------------------|
+| Low (&lt;100k events/month) | 365 days (default) |
+| Medium (100k–1M/month) | 180 days |
+| High (&gt;1M/month) | 90 days |
+| Very high (&gt;10M/month) | 30–60 days |
+
+<Tip>
+  Sparklytics automatically deletes events older than the retention period. No manual cleanup required.
+</Tip>
+
+## Storage Optimization
+
+### Disk Space Requirements
+
+- **278 MB per 1 million events** (DuckDB format)
+- Includes indexes and compressed storage
+- Linear scaling up to ~10M events
+
+Example calculations:
+
+| Events/Month | Storage/Month | Storage/Year (365 days) |
+|--------------|---------------|------------------------|
+| 100k | 28 MB | 336 MB |
+| 1M | 278 MB | 3.3 GB |
+| 10M | 2.8 GB | 33 GB |
+| 50M | 14 GB | 168 GB |
+
+### Volume Performance
+
+For Docker deployments, use appropriate volume drivers:
+
+<Tabs>
+  <Tab title="Local SSD (Best)">
+    ```yaml
+    volumes:
+      sparklytics-data:
+        driver: local
+        driver_opts:
+          type: none
+          o: bind
+          device: /mnt/ssd/sparklytics
+    ```
+  </Tab>
+
+  <Tab title="Named Volume (Default)">
+    ```yaml
+    volumes:
+      sparklytics-data:
+    ```
+
+    Good for most deployments. Docker manages storage automatically.
+  </Tab>
+
+  <Tab title="NFS (Network)">
+    ```yaml
+    volumes:
+      sparklytics-data:
+        driver: local
+        driver_opts:
+          type: nfs
+          o: addr=nfs-server.local,rw
+          device: ":/path/to/storage"
+    ```
+
+    <Warning>
+      NFS has higher latency. Not recommended for high-traffic deployments.
+    </Warning>
+  </Tab>
+</Tabs>
+
+## CPU and Concurrency
+
+### Container Resource Limits
+
+For predictable performance, set resource limits:
+
+```yaml
+services:
+  sparklytics:
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 4G
+        reservations:
+          cpus: '1'
+          memory: 1G
+```
+
+### Recommended by Traffic Level
+
+| Requests/Second | CPU Cores | Memory | Notes |
+|-----------------|-----------|--------|-------|
+| &lt;100 | 1 | 1 GB | Small sites |
+| 100–500 | 2 | 2 GB | Medium traffic |
+| 500–2000 | 4 | 4 GB | High traffic |
+| &gt;2000 | 8+ | 8 GB+ | Consider cloud version |
+
+## Rate Limiting
+
+Sparklytics has built-in rate limiting on `/api/collect`: **60 requests/minute per IP**.
+
+### Reverse Proxy Rate Limiting
+
+Add an additional layer at your reverse proxy:
+
+<Tabs>
+  <Tab title="Nginx">
+    ```nginx
+    http {
+        limit_req_zone $binary_remote_addr zone=analytics:10m rate=60r/m;
+    }
+
+    server {
+        location /api/collect {
+            limit_req zone=analytics burst=20 nodelay;
+            proxy_pass http://sparklytics:3000;
+        }
+    }
+    ```
+  </Tab>
+
+  <Tab title="Caddy">
+    ```caddyfile
+    analytics.example.com {
+        @collect {
+            path /api/collect
+        }
+        handle @collect {
+            rate_limit {
+                zone dynamic_analytics {
+                    key {remote_host}
+                    events 60
+                    window 1m
+                }
+            }
+            reverse_proxy sparklytics:3000
+        }
+        reverse_proxy sparklytics:3000
+    }
+    ```
+  </Tab>
+</Tabs>
+
+## CORS Configuration
+
+Restrict API access to specific origins for security and performance:
+
+```yaml
+environment:
+  - SPARKLYTICS_CORS_ORIGINS=https://yoursite.com,https://www.yoursite.com
+```
+
+<Warning>
+  If not set, Sparklytics allows **all origins** by default. Always configure this for production.
+</Warning>
+
+## Query Performance Tips
+
+### Dashboard Loading
+
+1. **Use appropriate date ranges**
+   - Last 7 days loads faster than last 365 days
+   - Avoid unnecessarily long ranges
+
+2. **DuckDB query memory impacts large aggregations**
+   - Increase `SPARKLYTICS_DUCKDB_MEMORY` for better performance on large datasets
+   - Monitor memory usage: `docker stats sparklytics`
+
+3. **Indexing is automatic**
+   - DuckDB automatically optimizes queries
+   - No manual index management needed
+
+### API Query Optimization
+
+When querying the API programmatically:
+
+```javascript
+// Good: Specific date range
+fetch('/api/websites/site_id/stats?start_date=2026-03-01&end_date=2026-03-07')
+
+// Bad: Open-ended or very long ranges
+fetch('/api/websites/site_id/stats?start_date=2020-01-01&end_date=2026-12-31')
+```
+
+## Monitoring
+
+### Health Check Endpoint
+
+```bash
+curl http://localhost:3000/health
+```
+
+Response:
+```json
+{"status":"ok"}
+```
+
+Set up monitoring to alert if this returns non-200.
+
+### Docker Stats
+
+Monitor resource usage:
+
+```bash
+docker stats sparklytics
+```
+
+Example output:
+```
+NAME           CPU %   MEM USAGE / LIMIT   MEM %   NET I/O
+sparklytics    5.2%    156MiB / 4GiB       3.8%    1.2MB / 890KB
+```
+
+### Log Monitoring
+
+Sparklytics logs to stdout. View with:
+
+```bash
+docker logs -f sparklytics
+```
+
+Look for:
+- `ERROR` level logs (indicates issues)
+- Request latencies (should be &lt;10ms for most requests)
+- Rate limit rejections (429 responses)
+
+## Horizontal Scaling
+
+Sparklytics (self-hosted DuckDB version) is **single-instance only**. DuckDB is an embedded database and cannot be shared across multiple processes.
+
+### When to Scale
+
+If you hit these limits:
+- &gt;2000 requests/second sustained
+- &gt;10M events/month
+- &gt;500 concurrent dashboard users
+- Query latency >1 second consistently
+
+**Solution:** Migrate to Sparklytics Cloud with ClickHouse:
+- 10–239x faster queries
+- Horizontal scaling
+- Distributed query execution
+- 5.8x better storage efficiency
+
+## Backup and Recovery
+
+### Automated Backups
+
+The DuckDB database is a single file. Back it up regularly:
+
+```bash
+# Find the data directory
+docker volume inspect sparklytics-data
+
+# Backup script
+#!/bin/bash
+DATE=$(date +%Y%m%d)
+BACKUP_DIR=/backups/sparklytics
+mkdir -p $BACKUP_DIR
+
+docker run --rm \
+  -v sparklytics-data:/data \
+  -v $BACKUP_DIR:/backup \
+  alpine \
+  tar czf /backup/sparklytics-$DATE.tar.gz -C /data .
+```
+
+Schedule with cron:
+```cron
+0 2 * * * /usr/local/bin/backup-sparklytics.sh
+```
+
+### Restore from Backup
+
+```bash
+# Stop Sparklytics
+docker compose down
+
+# Restore data
+docker run --rm \
+  -v sparklytics-data:/data \
+  -v /backups/sparklytics:/backup \
+  alpine \
+  sh -c "rm -rf /data/* && tar xzf /backup/sparklytics-20260303.tar.gz -C /data"
+
+# Start Sparklytics
+docker compose up -d
+```
+
+## OS-Level Optimizations
+
+### Linux Kernel Parameters
+
+For high-traffic deployments, tune kernel parameters:
+
+```bash
+sudo sysctl -w net.core.somaxconn=4096
+sudo sysctl -w net.ipv4.tcp_max_syn_backlog=4096
+sudo sysctl -w net.ipv4.ip_local_port_range="1024 65535"
+```
+
+Make permanent in `/etc/sysctl.conf`:
+```conf
+net.core.somaxconn=4096
+net.ipv4.tcp_max_syn_backlog=4096
+net.ipv4.ip_local_port_range=1024 65535
+```
+
+### File Descriptor Limits
+
+Increase open file limits:
+
+```bash
+# For Docker container
+services:
+  sparklytics:
+    ulimits:
+      nofile:
+        soft: 65536
+        hard: 65536
+```
+
+## CDN for Tracking Script
+
+The tracking script (`/s.js`) is small (~5 KB gzipped) but frequently requested.
+
+### Cloudflare Caching
+
+Add a cache rule for `/s.js`:
+
+```caddyfile
+analytics.example.com {
+    @script {
+        path /s.js
+    }
+    handle @script {
+        header Cache-Control "public, max-age=3600"
+        reverse_proxy sparklytics:3000
+    }
+    reverse_proxy sparklytics:3000
+}
+```
+
+<Tip>
+  The tracking script rarely changes. Safe to cache for 1–24 hours.
+</Tip>
+
+## Production Checklist
+
+Before going live with high traffic:
+
+- [ ] Set `SPARKLYTICS_DUCKDB_MEMORY` based on server size
+- [ ] Configure `SPARKLYTICS_RETENTION_DAYS` for your traffic level
+- [ ] Enable HTTPS with valid certificate
+- [ ] Set `SPARKLYTICS_CORS_ORIGINS` explicitly
+- [ ] Configure resource limits in docker-compose
+- [ ] Set up automated backups
+- [ ] Configure health check monitoring
+- [ ] Add reverse proxy rate limiting
+- [ ] Use SSD storage for data volume
+- [ ] Review and optimize OS kernel parameters
+- [ ] Enable log rotation for Docker logs
+
+## Troubleshooting Performance Issues
+
+<AccordionGroup>
+  <Accordion title="Slow dashboard queries">
+    **Symptoms:** Stats pages take >5 seconds to load
+
+    **Solutions:**
+    - Increase `SPARKLYTICS_DUCKDB_MEMORY`
+    - Reduce retention period
+    - Use shorter date ranges
+    - Check disk I/O (use SSD)
+  </Accordion>
+
+  <Accordion title="High memory usage">
+    **Symptoms:** Container uses >80% of allocated memory
+
+    **Solutions:**
+    - Large datasets require more memory
+    - Increase container memory limit
+    - Reduce `SPARKLYTICS_RETENTION_DAYS`
+    - Consider cloud version for &gt;10M events
+  </Accordion>
+
+  <Accordion title="Event collection timeouts">
+    **Symptoms:** 502/504 errors on `/api/collect`
+
+    **Solutions:**
+    - Check CPU usage: `docker stats`
+    - Increase CPU allocation
+    - Verify disk is not full
+    - Check network between proxy and container
+  </Accordion>
+
+  <Accordion title="Database file corruption">
+    **Symptoms:** Errors on startup or queries
+
+    **Solutions:**
+    - Restore from latest backup
+    - Check disk health
+    - Ensure clean shutdowns (avoid `kill -9`)
+    - Use `restart: unless-stopped` in compose file
+  </Accordion>
+</AccordionGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Docker Deployment" icon="docker" href="/self-hosting/docker-deployment">
+    Complete Docker setup guide
+  </Card>
+  <Card title="Reverse Proxy" icon="server" href="/self-hosting/reverse-proxy">
+    Caddy, Nginx, and Traefik configs
+  </Card>
+  <Card title="HTTPS Setup" icon="lock" href="/self-hosting/https-setup">
+    SSL/TLS certificate management
+  </Card>
+  <Card title="API Reference" icon="code" href="/api/overview">
+    Query your analytics data programmatically
+  </Card>
+</CardGroup>

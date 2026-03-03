@@ -1,0 +1,589 @@
+---
+title: 'Goals'
+description: 'Track and measure conversion events'
+---
+
+## List goals for a website
+
+<CodeGroup>
+```bash cURL
+curl -X GET https://analytics.example.com/api/websites/site_abc123/goals \
+  -H "Authorization: Bearer spk_selfhosted_abc123..."
+```
+</CodeGroup>
+
+### Path Parameters
+
+<ParamField path="website_id" type="string" required>
+  Website ID (format: `site_*`)
+</ParamField>
+
+### Response (200 OK)
+
+<ResponseField name="data" type="array">
+  Array of goal objects
+  <Expandable title="Goal object">
+    <ResponseField name="id" type="string" required>
+      Goal ID (format: `goal_` + 10 alphanumeric chars)
+    </ResponseField>
+    <ResponseField name="website_id" type="string" required>
+      Parent website ID
+    </ResponseField>
+    <ResponseField name="name" type="string" required>
+      Goal display name (1-100 characters)
+    </ResponseField>
+    <ResponseField name="goal_type" type="string" required>
+      Type of goal: `event` or `pageview`
+    </ResponseField>
+    <ResponseField name="match_value" type="string" required>
+      Value to match against (1-500 characters)
+      - For `event` goals: event name (e.g., `signup_click`)
+      - For `pageview` goals: URL path (e.g., `/thank-you`)
+    </ResponseField>
+    <ResponseField name="match_operator" type="string" required>
+      How to match: `equals`, `starts_with`, `ends_with`, or `contains`
+    </ResponseField>
+    <ResponseField name="value_mode" type="string" required>
+      How to track value: `none`, `fixed`, or `event_property`
+    </ResponseField>
+    <ResponseField name="fixed_value" type="number | null">
+      Fixed numeric value (required when `value_mode=fixed`, must be non-negative)
+    </ResponseField>
+    <ResponseField name="value_property_key" type="string | null">
+      Event property key to extract value from (required when `value_mode=event_property`)
+    </ResponseField>
+    <ResponseField name="currency" type="string" required>
+      Currency code (1-8 characters, default `USD`)
+    </ResponseField>
+    <ResponseField name="created_at" type="string" required>
+      ISO 8601 timestamp
+    </ResponseField>
+    <ResponseField name="updated_at" type="string" required>
+      ISO 8601 timestamp
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+### Response Example
+
+```json
+{
+  "data": [
+    {
+      "id": "goal_abc123",
+      "website_id": "site_xyz789",
+      "name": "Pro Signup",
+      "goal_type": "event",
+      "match_value": "signup_click",
+      "match_operator": "equals",
+      "value_mode": "fixed",
+      "fixed_value": 99.0,
+      "value_property_key": null,
+      "currency": "USD",
+      "created_at": "2026-03-01T10:00:00Z",
+      "updated_at": "2026-03-01T10:00:00Z"
+    }
+  ]
+}
+```
+
+---
+
+## Create a goal
+
+<Info>
+  Maximum of **50 goals per website**. Creating more will return a `422 Unprocessable Entity` error.
+</Info>
+
+<CodeGroup>
+```bash cURL
+curl -X POST https://analytics.example.com/api/websites/site_abc123/goals \
+  -H "Authorization: Bearer spk_selfhosted_abc123..." \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Pro Signup",
+    "goal_type": "event",
+    "match_value": "signup_click",
+    "match_operator": "equals",
+    "value_mode": "fixed",
+    "fixed_value": 99.0,
+    "currency": "USD"
+  }'
+```
+</CodeGroup>
+
+### Path Parameters
+
+<ParamField path="website_id" type="string" required>
+  Website ID (format: `site_*`)
+</ParamField>
+
+### Request Body
+
+<ParamField body="name" type="string" required>
+  Goal display name (1-100 characters, must not be empty or whitespace-only)
+  
+  **Must be unique per website** — duplicate names return a `422` error.
+</ParamField>
+
+<ParamField body="goal_type" type="string" required>
+  Type of goal:
+  - `event` — Match custom event names (tracked via `window.sparklytics.track('event_name')`)
+  - `pageview` — Match page URLs
+</ParamField>
+
+<ParamField body="match_value" type="string" required>
+  Value to match (1-500 characters)
+  - For `event`: event name (e.g., `signup_click`)
+  - For `pageview`: URL path (e.g., `/thank-you`, `/checkout`)
+</ParamField>
+
+<ParamField body="match_operator" type="string" default="equals">
+  How to match the value:
+  - `equals` — Exact match (default)
+  - `starts_with` — Value starts with match_value
+  - `ends_with` — Value ends with match_value
+  - `contains` — Value contains match_value
+</ParamField>
+
+<ParamField body="value_mode" type="string" default="none">
+  How to track goal value:
+  - `none` — No value tracking (default)
+  - `fixed` — Use a fixed numeric value (requires `fixed_value`)
+  - `event_property` — Extract value from event property (requires `value_property_key`)
+</ParamField>
+
+<ParamField body="fixed_value" type="number">
+  Fixed numeric value (required when `value_mode=fixed`, must be non-negative)
+  
+  Example: `99.0` for a $99 conversion
+</ParamField>
+
+<ParamField body="value_property_key" type="string">
+  Event property key to extract value from (required when `value_mode=event_property`)
+  
+  Example: If you track `window.sparklytics.track('purchase', { amount: 49.99 })`, use `"amount"`
+</ParamField>
+
+<ParamField body="currency" type="string" default="USD">
+  Currency code (1-8 characters, e.g., `USD`, `EUR`, `GBP`)
+</ParamField>
+
+### Response (201 Created)
+
+<ResponseField name="data" type="object">
+  Created goal object (same structure as in list endpoint)
+</ResponseField>
+
+### Response Example
+
+```json
+{
+  "data": {
+    "id": "goal_abc123",
+    "website_id": "site_xyz789",
+    "name": "Pro Signup",
+    "goal_type": "event",
+    "match_value": "signup_click",
+    "match_operator": "equals",
+    "value_mode": "fixed",
+    "fixed_value": 99.0,
+    "value_property_key": null,
+    "currency": "USD",
+    "created_at": "2026-03-01T10:00:00Z",
+    "updated_at": "2026-03-01T10:00:00Z"
+  }
+}
+```
+
+### Error Responses
+
+<ResponseField name="422 Unprocessable Entity">
+  Validation errors:
+  
+  **Duplicate name:**
+  ```json
+  {
+    "error": {
+      "code": "duplicate_name",
+      "message": "goal name already exists for this website",
+      "field": "name"
+    }
+  }
+  ```
+  
+  **Limit exceeded:**
+  ```json
+  {
+    "error": {
+      "code": "limit_exceeded",
+      "message": "maximum of 50 goals per website reached",
+      "field": "goals"
+    }
+  }
+  ```
+  
+  **Invalid name:**
+  ```json
+  {
+    "error": {
+      "code": "validation_error",
+      "message": "name must not be empty",
+      "field": "name"
+    }
+  }
+  ```
+  
+  **Missing fixed_value:**
+  ```json
+  {
+    "error": {
+      "code": "validation_error",
+      "message": "fixed_value is required when value_mode=fixed",
+      "field": "fixed_value"
+    }
+  }
+  ```
+</ResponseField>
+
+<ResponseField name="404 Not Found">
+  Website does not exist
+</ResponseField>
+
+---
+
+## Update a goal
+
+<CodeGroup>
+```bash cURL
+curl -X PUT https://analytics.example.com/api/websites/site_abc123/goals/goal_xyz789 \
+  -H "Authorization: Bearer spk_selfhosted_abc123..." \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Pro Signup (Updated)",
+    "fixed_value": 149.0
+  }'
+```
+</CodeGroup>
+
+### Path Parameters
+
+<ParamField path="website_id" type="string" required>
+  Website ID (format: `site_*`)
+</ParamField>
+
+<ParamField path="goal_id" type="string" required>
+  Goal ID (format: `goal_*`)
+</ParamField>
+
+### Request Body
+
+All fields are optional. Only provided fields will be updated.
+
+<ParamField body="name" type="string">
+  New goal name (must be unique per website, 1-100 characters)
+</ParamField>
+
+<ParamField body="match_value" type="string">
+  New match value (1-500 characters)
+</ParamField>
+
+<ParamField body="match_operator" type="string">
+  New match operator: `equals`, `starts_with`, `ends_with`, or `contains`
+</ParamField>
+
+<ParamField body="value_mode" type="string">
+  New value mode: `none`, `fixed`, or `event_property`
+</ParamField>
+
+<ParamField body="fixed_value" type="number">
+  New fixed value (must be non-negative)
+</ParamField>
+
+<ParamField body="value_property_key" type="string">
+  New event property key
+</ParamField>
+
+<ParamField body="currency" type="string">
+  New currency code (1-8 characters)
+</ParamField>
+
+### Response (200 OK)
+
+<ResponseField name="data" type="object">
+  Updated goal object (same structure as in list endpoint)
+</ResponseField>
+
+### Error Responses
+
+<ResponseField name="422 Unprocessable Entity">
+  Validation errors (same as create endpoint)
+</ResponseField>
+
+<ResponseField name="404 Not Found">
+  Website or goal does not exist
+</ResponseField>
+
+---
+
+## Delete a goal
+
+<Warning>
+  This permanently deletes the goal. Historical conversion data is preserved but will no longer be associated with this goal definition.
+</Warning>
+
+<CodeGroup>
+```bash cURL
+curl -X DELETE https://analytics.example.com/api/websites/site_abc123/goals/goal_xyz789 \
+  -H "Authorization: Bearer spk_selfhosted_abc123..."
+```
+</CodeGroup>
+
+### Path Parameters
+
+<ParamField path="website_id" type="string" required>
+  Website ID (format: `site_*`)
+</ParamField>
+
+<ParamField path="goal_id" type="string" required>
+  Goal ID (format: `goal_*`)
+</ParamField>
+
+### Response (204 No Content)
+
+Empty response body on successful deletion.
+
+### Error Responses
+
+<ResponseField name="404 Not Found">
+  Website or goal does not exist
+</ResponseField>
+
+---
+
+## Get goal statistics
+
+Returns conversion metrics for a specific goal over a date range.
+
+<CodeGroup>
+```bash cURL
+curl -X GET "https://analytics.example.com/api/websites/site_abc123/goals/goal_xyz789/stats?start_date=2026-03-01&end_date=2026-03-07" \
+  -H "Authorization: Bearer spk_selfhosted_abc123..."
+```
+</CodeGroup>
+
+### Path Parameters
+
+<ParamField path="website_id" type="string" required>
+  Website ID (format: `site_*`)
+</ParamField>
+
+<ParamField path="goal_id" type="string" required>
+  Goal ID (format: `goal_*`)
+</ParamField>
+
+### Query Parameters
+
+<ParamField query="start_date" type="string" default="6 days ago">
+  Start date in `YYYY-MM-DD` format (defaults to 6 days before end_date)
+</ParamField>
+
+<ParamField query="end_date" type="string" default="today">
+  End date in `YYYY-MM-DD` format (defaults to today)
+</ParamField>
+
+<ParamField query="timezone" type="string">
+  IANA timezone for date range calculation (defaults to website's timezone)
+</ParamField>
+
+<ParamField query="filter_country" type="string">
+  Filter by ISO country code (e.g., `US`, `GB`)
+</ParamField>
+
+<ParamField query="filter_page" type="string">
+  Filter by page URL path
+</ParamField>
+
+<ParamField query="filter_referrer" type="string">
+  Filter by referrer domain
+</ParamField>
+
+<ParamField query="filter_browser" type="string">
+  Filter by browser name (e.g., `Chrome`, `Safari`)
+</ParamField>
+
+<ParamField query="filter_os" type="string">
+  Filter by operating system (e.g., `macOS`, `Windows`)
+</ParamField>
+
+<ParamField query="filter_device" type="string">
+  Filter by device type: `desktop`, `mobile`, or `tablet`
+</ParamField>
+
+<ParamField query="filter_language" type="string">
+  Filter by browser language (e.g., `en-US`)
+</ParamField>
+
+<ParamField query="filter_utm_source" type="string">
+  Filter by UTM source parameter
+</ParamField>
+
+<ParamField query="filter_utm_medium" type="string">
+  Filter by UTM medium parameter
+</ParamField>
+
+<ParamField query="filter_utm_campaign" type="string">
+  Filter by UTM campaign parameter
+</ParamField>
+
+<ParamField query="filter_region" type="string">
+  Filter by region/state (e.g., `California`, `TX`)
+</ParamField>
+
+<ParamField query="filter_city" type="string">
+  Filter by city name
+</ParamField>
+
+<ParamField query="filter_hostname" type="string">
+  Filter by hostname (useful for multi-domain tracking)
+</ParamField>
+
+<ParamField query="include_bots" type="boolean">
+  Include bot traffic (defaults to website's bot policy setting)
+</ParamField>
+
+### Response (200 OK)
+
+<ResponseField name="data" type="object">
+  <Expandable title="Goal statistics">
+    <ResponseField name="goal_id" type="string" required>
+      Goal ID
+    </ResponseField>
+    <ResponseField name="conversions" type="integer" required>
+      Total number of conversions in date range
+    </ResponseField>
+    <ResponseField name="converting_sessions" type="integer" required>
+      Number of unique sessions that converted
+    </ResponseField>
+    <ResponseField name="total_sessions" type="integer" required>
+      Total number of sessions in date range
+    </ResponseField>
+    <ResponseField name="conversion_rate" type="number" required>
+      Conversion rate (converting_sessions / total_sessions)
+    </ResponseField>
+    <ResponseField name="prev_conversions" type="integer | null">
+      Conversions in previous period (for comparison)
+    </ResponseField>
+    <ResponseField name="prev_conversion_rate" type="number | null">
+      Conversion rate in previous period
+    </ResponseField>
+    <ResponseField name="trend_pct" type="number | null">
+      Percentage change from previous period
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+### Response Example
+
+```json
+{
+  "data": {
+    "goal_id": "goal_abc123",
+    "conversions": 42,
+    "converting_sessions": 38,
+    "total_sessions": 1250,
+    "conversion_rate": 0.0304,
+    "prev_conversions": 35,
+    "prev_conversion_rate": 0.0287,
+    "trend_pct": 5.92
+  }
+}
+```
+
+### Error Responses
+
+<ResponseField name="404 Not Found">
+  Website or goal does not exist
+</ResponseField>
+
+---
+
+## Goal Types
+
+### Event Goals
+
+Track custom JavaScript events triggered by user actions.
+
+**Example:** Track signup button clicks
+
+```json
+{
+  "name": "Signup Clicks",
+  "goal_type": "event",
+  "match_value": "signup_click",
+  "match_operator": "equals"
+}
+```
+
+Trigger in your app:
+```js
+window.sparklytics.track('signup_click', { plan: 'pro' })
+```
+
+### Pageview Goals
+
+Track visits to specific pages (e.g., thank-you pages, checkout completion).
+
+**Example:** Track checkout completions
+
+```json
+{
+  "name": "Checkout Complete",
+  "goal_type": "pageview",
+  "match_value": "/checkout/success",
+  "match_operator": "equals"
+}
+```
+
+Converts automatically when users visit `/checkout/success`.
+
+---
+
+## Value Tracking
+
+### Fixed Value
+
+Assign a fixed monetary value to each conversion.
+
+```json
+{
+  "name": "Pro Plan Signup",
+  "goal_type": "event",
+  "match_value": "signup_pro",
+  "value_mode": "fixed",
+  "fixed_value": 99.0,
+  "currency": "USD"
+}
+```
+
+### Event Property Value
+
+Extract value from event data (useful for dynamic pricing).
+
+```json
+{
+  "name": "Purchase",
+  "goal_type": "event",
+  "match_value": "purchase",
+  "value_mode": "event_property",
+  "value_property_key": "amount",
+  "currency": "USD"
+}
+```
+
+Trigger with value:
+```js
+window.sparklytics.track('purchase', { amount: 49.99 })
+```
+
+Sparklytics extracts `49.99` from the `amount` property.

@@ -1,0 +1,139 @@
+---
+title: 'Get Realtime Data'
+api: 'GET /api/websites/:id/realtime'
+description: 'Retrieve current active visitors and recent events for real-time monitoring.'
+---
+
+## Path Parameters
+
+<ParamField path="id" type="string" required>
+  Website ID
+</ParamField>
+
+## Query Parameters
+
+<ParamField query="include_bots" type="boolean">
+  Whether to include bot traffic in results. Defaults to website's bot policy setting.
+</ParamField>
+
+## Response
+
+<ResponseField name="data" type="object">
+  Real-time analytics data.
+
+  <ResponseField name="active_visitors" type="integer">
+    Number of visitors who had activity in the last 5 minutes.
+  </ResponseField>
+
+  <ResponseField name="recent_events" type="array">
+    Array of recent events (up to 100 most recent).
+
+    <ResponseField name="event_type" type="string">
+      Type of event: `pageview` or `event`.
+    </ResponseField>
+
+    <ResponseField name="url" type="string">
+      The page URL where the event occurred.
+    </ResponseField>
+
+    <ResponseField name="referrer_domain" type="string">
+      Referrer domain (if available).
+    </ResponseField>
+
+    <ResponseField name="country" type="string">
+      ISO 3166-1 alpha-2 country code (if available).
+    </ResponseField>
+
+    <ResponseField name="browser" type="string">
+      Browser name (if available).
+    </ResponseField>
+
+    <ResponseField name="device_type" type="string">
+      Device type: `desktop`, `mobile`, or `tablet` (if available).
+    </ResponseField>
+
+    <ResponseField name="ts" type="string">
+      Timestamp of the event in ISO 8601 format.
+    </ResponseField>
+  </ResponseField>
+
+  <ResponseField name="pagination" type="object">
+    Pagination metadata for recent events.
+
+    <ResponseField name="limit" type="integer">
+      Maximum number of events returned.
+    </ResponseField>
+
+    <ResponseField name="total_in_window" type="integer">
+      Total number of events in the real-time window.
+    </ResponseField>
+  </ResponseField>
+</ResponseField>
+
+## Example Request
+
+```bash
+curl -X GET "https://analytics.example.com/api/websites/abc123/realtime" \
+  -H "Authorization: Bearer spk_live_your_api_key"
+```
+
+## Example Response
+
+```json
+{
+  "data": {
+    "active_visitors": 47,
+    "recent_events": [
+      {
+        "event_type": "pageview",
+        "url": "https://example.com/pricing",
+        "referrer_domain": "google.com",
+        "country": "US",
+        "browser": "Chrome",
+        "device_type": "desktop",
+        "ts": "2024-03-07T15:42:31.123Z"
+      },
+      {
+        "event_type": "pageview",
+        "url": "https://example.com/",
+        "referrer_domain": null,
+        "country": "GB",
+        "browser": "Safari",
+        "device_type": "mobile",
+        "ts": "2024-03-07T15:42:28.456Z"
+      },
+      {
+        "event_type": "event",
+        "url": "https://example.com/signup",
+        "referrer_domain": "twitter.com",
+        "country": "CA",
+        "browser": "Firefox",
+        "device_type": "desktop",
+        "ts": "2024-03-07T15:42:15.789Z"
+      },
+      {
+        "event_type": "pageview",
+        "url": "https://example.com/docs/getting-started",
+        "referrer_domain": "github.com",
+        "country": "DE",
+        "browser": "Edge",
+        "device_type": "desktop",
+        "ts": "2024-03-07T15:41:52.321Z"
+      }
+    ],
+    "pagination": {
+      "limit": 100,
+      "total_in_window": 234
+    }
+  }
+}
+```
+
+## Notes
+
+- Active visitors are counted based on activity within the last 5 minutes
+- Recent events are limited to the most recent 100 events
+- This endpoint is optimized for frequent polling (every 5-10 seconds)
+- Events are returned in descending order by timestamp (newest first)
+- No date range parameters are needed as this endpoint always shows real-time data
+- The `total_in_window` shows all events in the time window, even though only the most recent 100 are returned

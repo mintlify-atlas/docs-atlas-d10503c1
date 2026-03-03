@@ -1,0 +1,432 @@
+---
+title: Retention Cohort Analysis
+description: Measure long-term user retention with cohort analysis by day, week, or month.
+---
+
+## Overview
+
+Retention analysis shows how many visitors return to your site over time. Sparklytics tracks retention cohorts automatically — no additional setup required beyond standard pageview tracking.
+
+<Frame>
+  <img src="/images/retention-heatmap.png" alt="Retention heatmap showing weekly cohorts" />
+</Frame>
+
+## How Retention Works
+
+Sparklytics groups visitors into cohorts based on their **first visit date**, then tracks how many return in subsequent periods.
+
+### Example: Weekly Cohorts
+
+| Cohort Start | Week 0 | Week 1 | Week 2 | Week 3 |
+|--------------|--------|--------|--------|--------|
+| Feb 3        | 100%   | 32%    | 24%    | 18%    |
+| Feb 10       | 100%   | 28%    | 22%    | —      |
+| Feb 17       | 100%   | 35%    | —      | —      |
+| Feb 24       | 100%   | —      | —      | —      |
+
+- **Week 0**: Always 100% (all new visitors)
+- **Week 1**: Percentage who returned 1 week later
+- **Week 2**: Percentage who returned 2 weeks later
+
+## Granularity Options
+
+### Day
+
+Track daily retention for the first 30 days:
+
+```bash
+GET /api/websites/{website_id}/retention?
+  cohort_granularity=day&
+  max_periods=30&
+  start_date=2026-02-01&
+  end_date=2026-03-01
+```
+
+Best for:
+- Short-term engagement analysis
+- Apps with daily active users
+- Quick A/B test validation
+
+### Week
+
+Track weekly retention for up to 12 weeks:
+
+```bash
+GET /api/websites/{website_id}/retention?
+  cohort_granularity=week&
+  max_periods=8
+```
+
+**Default granularity** if not specified.
+
+Best for:
+- SaaS products
+- Content sites with weekly publishing
+- Medium-term engagement trends
+
+### Month
+
+Track monthly retention for up to 12 months:
+
+```bash
+GET /api/websites/{website_id}/retention?
+  cohort_granularity=month&
+  max_periods=12
+```
+
+Best for:
+- Long-term user behavior
+- Annual subscription products
+- Low-frequency usage patterns
+
+## API Reference
+
+### Endpoint
+
+```bash
+GET /api/websites/{website_id}/retention
+```
+
+### Query Parameters
+
+<ParamField query="start_date" type="string" required>
+  Start date in `YYYY-MM-DD` format (required)
+</ParamField>
+
+<ParamField query="end_date" type="string" required>
+  End date in `YYYY-MM-DD` format (required)
+</ParamField>
+
+<ParamField query="cohort_granularity" type="string" default="week">
+  Cohort period: `day`, `week`, or `month`
+</ParamField>
+
+<ParamField query="max_periods" type="number">
+  Number of periods to track. Defaults:
+  - Day: 30 (max 30)
+  - Week: 8 (max 12)
+  - Month: 12 (max 12)
+</ParamField>
+
+<ParamField query="timezone" type="string" default="UTC">
+  IANA timezone for cohort boundaries (e.g., `America/New_York`)
+</ParamField>
+
+### Response
+
+```json
+{
+  "data": {
+    "cohorts": [
+      {
+        "cohort_label": "2026-02-03",
+        "cohort_size": 1250,
+        "periods": [
+          { "period": 0, "visitors": 1250, "rate": 100.0 },
+          { "period": 1, "visitors": 398, "rate": 31.84 },
+          { "period": 2, "visitors": 301, "rate": 24.08 },
+          { "period": 3, "visitors": 225, "rate": 18.0 }
+        ]
+      },
+      {
+        "cohort_label": "2026-02-10",
+        "cohort_size": 1100,
+        "periods": [
+          { "period": 0, "visitors": 1100, "rate": 100.0 },
+          { "period": 1, "visitors": 308, "rate": 28.0 },
+          { "period": 2, "visitors": 242, "rate": 22.0 }
+        ]
+      }
+    ],
+    "granularity": "week",
+    "max_periods": 8
+  }
+}
+```
+
+### Response Fields
+
+<ResponseField name="cohort_label" type="string">
+  ISO 8601 date string representing the cohort start
+</ResponseField>
+
+<ResponseField name="cohort_size" type="number">
+  Total unique visitors who first visited during this cohort period
+</ResponseField>
+
+<ResponseField name="period" type="number">
+  Zero-indexed period offset (0 = first visit period)
+</ResponseField>
+
+<ResponseField name="visitors" type="number">
+  Number of cohort members who returned in this period
+</ResponseField>
+
+<ResponseField name="rate" type="number">
+  Retention rate as a percentage (visitors / cohort_size × 100)
+</ResponseField>
+
+## Implementation Details
+
+### Granularity Parsing
+
+From `crates/sparklytics-server/src/routes/retention.rs:47`:
+
+```rust
+fn parse_granularity(raw: Option<&str>) -> Result<RetentionGranularity, AppError> {
+    match raw.map(str::trim) {
+        None => Ok(RetentionGranularity::Week),
+        Some("day") => Ok(RetentionGranularity::Day),
+        Some("week") => Ok(RetentionGranularity::Week),
+        Some("month") => Ok(RetentionGranularity::Month),
+        Some(_) => Err(AppError::BadRequest(
+            "cohort_granularity must be one of: day, week, month".to_string(),
+        )),
+    }
+}
+```
+
+### Period Limits
+
+From `crates/sparklytics-server/src/routes/retention.rs:67`:
+
+```rust
+fn validate_max_periods(
+    granularity: &RetentionGranularity,
+    max_periods: u32,
+) -> Result<(), AppError> {
+    let (min, max, label) = match granularity {
+        RetentionGranularity::Day => (1, 30, "daily"),
+        RetentionGranularity::Week => (1, 12, "weekly"),
+        RetentionGranularity::Month => (1, 12, "monthly"),
+    };
+
+    if (min..=max).contains(&max_periods) {
+        Ok(())
+    } else {
+        Err(AppError::BadRequest(format!(
+            "max_periods must be between {min} and {max} for {label} granularity"
+        )))
+    }
+}
+```
+
+### Concurrency Control
+
+Retention queries are computationally expensive, so they're rate-limited with a semaphore:
+
+```rust
+const RETENTION_QUEUE_WAIT_TIMEOUT: Duration = Duration::from_secs(5);
+
+let _permit = tokio::time::timeout(
+    RETENTION_QUEUE_WAIT_TIMEOUT,
+    state.retention_semaphore.acquire(),
+)
+.await
+.map_err(|_| AppError::RateLimited)?;
+```
+
+If the queue is full, requests return `429 Too Many Requests`.
+
+## Filtering Retention Data
+
+Apply standard filters to analyze retention for specific segments:
+
+```bash
+GET /api/websites/{website_id}/retention?
+  cohort_granularity=week&
+  filter_country=US&
+  filter_utm_source=google
+```
+
+### Available Filters
+
+All standard filters work with retention:
+
+- `filter_country`
+- `filter_region`
+- `filter_city`
+- `filter_browser`
+- `filter_os`
+- `filter_device`
+- `filter_page` — Entry page filter
+- `filter_referrer`
+- `filter_utm_source`
+- `filter_utm_medium`
+- `filter_utm_campaign`
+
+## Dashboard Visualization
+
+The retention heatmap component provides an interactive view:
+
+### Color Scale
+
+From `dashboard/components/retention/RetentionHeatmap.tsx`:
+
+- **0-10%**: Light gray (very low retention)
+- **10-25%**: Yellow to orange (low retention)
+- **25-50%**: Orange to light green (moderate retention)
+- **50-75%**: Green (good retention)
+- **75-100%**: Dark green (excellent retention)
+
+### Tooltip
+
+Hover over any cell to see:
+
+```
+Cohort: Feb 3, 2026
+Week 2
+301 visitors (24.08%)
+```
+
+## Performance Considerations
+
+### DuckDB (Self-Hosted)
+
+Retention queries on DuckDB can be slow for large datasets:
+
+- **< 1M events**: Sub-second queries
+- **1M-10M events**: 1-5 seconds
+- **> 10M events**: Consider upgrading to ClickHouse
+
+### ClickHouse (Cloud)
+
+ClickHouse provides near-constant query time:
+
+- **< 1M events**: < 100ms
+- **100M+ events**: < 500ms
+- **1B+ events**: < 2 seconds
+
+From the README benchmarks:
+
+> ClickHouse vs DuckDB speedup: **10–68x** at 100k, **47–239x** at 1M
+
+## Use Cases
+
+### Product-Market Fit
+
+Measure whether users come back after their first visit:
+
+```bash
+# Track weekly retention for new users
+GET .../retention?cohort_granularity=week&max_periods=12
+```
+
+**Good retention** (product-market fit indicators):
+- Week 1: > 30%
+- Week 4: > 20%
+- Week 8: > 15%
+
+### Feature Launch Impact
+
+Compare retention before and after a feature launch:
+
+```bash
+# Pre-launch cohorts
+GET .../retention?start_date=2026-01-01&end_date=2026-01-31
+
+# Post-launch cohorts
+GET .../retention?start_date=2026-02-01&end_date=2026-02-28
+```
+
+### Onboarding Optimization
+
+Filter by entry page to see if different landing pages affect retention:
+
+```bash
+# Users who entered via homepage
+GET .../retention?filter_page=/
+
+# Users who entered via pricing
+GET .../retention?filter_page=/pricing
+```
+
+### Campaign Effectiveness
+
+Compare retention across traffic sources:
+
+```bash
+# Organic search
+GET .../retention?filter_utm_source=google&filter_utm_medium=organic
+
+# Paid ads
+GET .../retention?filter_utm_source=google&filter_utm_medium=cpc
+```
+
+## Best Practices
+
+### Choose the Right Granularity
+
+- **Daily**: Apps with daily active users (DAU focus)
+- **Weekly**: Most SaaS products (default choice)
+- **Monthly**: Enterprise tools, infrequent-use products
+
+### Set Realistic Period Counts
+
+Don't request more periods than you have data:
+
+```bash
+# Bad: Requesting 12 weeks when you only have 4 weeks of data
+max_periods=12&start_date=2026-02-01&end_date=2026-02-28
+
+# Good: Match periods to available data
+max_periods=4&start_date=2026-02-01&end_date=2026-02-28
+```
+
+### Use Filters for Segmentation
+
+Compare retention across:
+
+- Device types (mobile vs desktop)
+- Geographic regions
+- Traffic sources
+- Landing pages
+
+### Monitor Trends, Not Absolutes
+
+Retention rates vary by industry. Focus on:
+
+- **Trends over time**: Is retention improving?
+- **Relative comparisons**: Which segments retain better?
+- **Inflection points**: Where does retention stabilize?
+
+## Troubleshooting
+
+### "Query timeout" Error
+
+If you see a 408 response:
+
+```json
+{
+  "error": "Query timeout. Retry after 2 seconds."
+}
+```
+
+Causes:
+- Dataset is too large for DuckDB
+- Too many concurrent retention queries
+
+Solutions:
+- Reduce date range
+- Reduce `max_periods`
+- Add more filters to narrow the dataset
+- Upgrade to ClickHouse for large datasets
+
+### Sparse Data
+
+If cohorts show 0% retention:
+
+- **Insufficient traffic**: Need at least ~100 visitors per cohort for meaningful data
+- **Date range too recent**: Later cohorts won't have data for future periods yet
+- **Filters too restrictive**: Broaden filters or remove them
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Sessions" icon="clock" href="/features/sessions">
+    Drill down into individual user sessions
+  </Card>
+  <Card title="Journey Analysis" icon="route" href="/features/journey-analysis">
+    Explore what returning users do on subsequent visits
+  </Card>
+</CardGroup>

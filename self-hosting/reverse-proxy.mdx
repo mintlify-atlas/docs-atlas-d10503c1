@@ -1,0 +1,412 @@
+---
+title: 'Reverse Proxy Setup'
+description: 'Configure Caddy, Nginx, or Traefik as a reverse proxy for Sparklytics'
+---
+
+Running Sparklytics behind a reverse proxy provides HTTPS termination, domain routing, and optional security hardening.
+
+## Caddy (Recommended)
+
+Caddy provides automatic HTTPS with zero configuration. It obtains and renews Let's Encrypt certificates automatically.
+
+### Docker Compose with Caddy
+
+Sparklytics provides a ready-to-use Caddy setup:
+
+```yaml
+version: '3.8'
+
+# Production setup with automatic HTTPS via Caddy.
+#
+# Usage:
+#   1. Replace "analytics.example.com" below with your actual domain.
+#   2. Make sure port 80 and 443 are open on your server.
+#   3. Run: docker compose -f docker-compose.caddy.yml up -d
+#
+# Caddy handles TLS certificate issuance and renewal automatically.
+
+services:
+  sparklytics:
+    image: sparklytics/sparklytics:latest
+    volumes:
+      - sparklytics-data:/data
+    environment:
+      - SPARKLYTICS_AUTH=local
+      - SPARKLYTICS_HTTPS=true
+      - SPARKLYTICS_DUCKDB_MEMORY=1GB
+      # Uncomment and set to your tracked site(s):
+      # - SPARKLYTICS_CORS_ORIGINS=https://yoursite.com
+    restart: unless-stopped
+    # No "ports" here — Caddy is the only public entry point.
+
+  caddy:
+    image: caddy:2-alpine
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    restart: unless-stopped
+    depends_on:
+      - sparklytics
+
+volumes:
+  sparklytics-data:
+  caddy-data:
+  caddy-config:
+```
+
+### Caddyfile
+
+Create a `Caddyfile` in the same directory:
+
+```caddyfile
+# Replace with your domain. Caddy obtains a free TLS certificate automatically.
+analytics.example.com {
+    reverse_proxy sparklytics:3000
+}
+```
+
+### Deployment Steps
+
+<Steps>
+  <Step title="Download the configuration">
+    ```bash
+    curl -O https://raw.githubusercontent.com/Sparklytics/sparklytics/main/docker-compose.caddy.yml
+    curl -O https://raw.githubusercontent.com/Sparklytics/sparklytics/main/Caddyfile
+    ```
+  </Step>
+
+  <Step title="Edit the Caddyfile">
+    Replace `analytics.example.com` with your actual domain:
+    ```bash
+    nano Caddyfile
+    ```
+  </Step>
+
+  <Step title="Ensure DNS is configured">
+    Your domain must point to your server's IP address before starting. Caddy needs to verify domain ownership for Let's Encrypt.
+  </Step>
+
+  <Step title="Open required ports">
+    Caddy needs ports 80 and 443:
+    ```bash
+    # For ufw
+    sudo ufw allow 80/tcp
+    sudo ufw allow 443/tcp
+    ```
+  </Step>
+
+  <Step title="Start the services">
+    ```bash
+    docker compose -f docker-compose.caddy.yml up -d
+    ```
+  </Step>
+
+  <Step title="Verify HTTPS works">
+    Visit `https://analytics.yourdomain.com` — you should see a valid SSL certificate.
+  </Step>
+</Steps>
+
+### Advanced Caddyfile Options
+
+#### Custom Headers
+
+```caddyfile
+analytics.example.com {
+    reverse_proxy sparklytics:3000
+
+    header {
+        # Security headers
+        Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+        X-Content-Type-Options "nosniff"
+        X-Frame-Options "DENY"
+        Referrer-Policy "strict-origin-when-cross-origin"
+    }
+}
+```
+
+#### IP Allowlist
+
+```caddyfile
+analytics.example.com {
+    @allowed {
+        remote_ip 203.0.113.0/24 198.51.100.0/24
+    }
+    handle @allowed {
+        reverse_proxy sparklytics:3000
+    }
+    handle {
+        respond "Access denied" 403
+    }
+}
+```
+
+#### Basic Auth (Additional Layer)
+
+```caddyfile
+analytics.example.com {
+    basicauth {
+        # username: admin, password: secure-password
+        admin JDJhJDE0JFNvbWVIYXNoZWRQYXNzd29yZA
+    }
+    reverse_proxy sparklytics:3000
+}
+```
+
+Generate the hash with:
+```bash
+caddy hash-password
+```
+
+## Nginx
+
+### Configuration
+
+Create `/etc/nginx/sites-available/sparklytics`:
+
+```nginx
+server {
+    listen 80;
+    listen [::]:80;
+    server_name analytics.example.com;
+
+    # Redirect HTTP to HTTPS
+    return 301 https://$server_name$request_uri;
+}
+
+server {
+    listen 443 ssl http2;
+    listen [::]:443 ssl http2;
+    server_name analytics.example.com;
+
+    # SSL certificate paths (use certbot for Let's Encrypt)
+    ssl_certificate /etc/letsencrypt/live/analytics.example.com/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/analytics.example.com/privkey.pem;
+
+    # SSL configuration
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_ciphers HIGH:!aNULL:!MD5;
+    ssl_prefer_server_ciphers on;
+
+    # Security headers
+    add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
+    add_header X-Content-Type-Options "nosniff" always;
+    add_header X-Frame-Options "DENY" always;
+
+    # Proxy to Sparklytics
+    location / {
+        proxy_pass http://localhost:3000;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+
+        # WebSocket support (if needed in future)
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+    }
+
+    # Optimize for analytics collection endpoint
+    location /api/collect {
+        proxy_pass http://localhost:3000;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+
+        # Rate limiting (optional)
+        limit_req zone=analytics burst=20 nodelay;
+    }
+}
+
+# Rate limit zone definition (add to http block in nginx.conf)
+http {
+    limit_req_zone $binary_remote_addr zone=analytics:10m rate=60r/m;
+}
+```
+
+### Deployment Steps
+
+<Steps>
+  <Step title="Install Nginx">
+    ```bash
+    sudo apt update
+    sudo apt install nginx
+    ```
+  </Step>
+
+  <Step title="Create configuration file">
+    ```bash
+    sudo nano /etc/nginx/sites-available/sparklytics
+    ```
+
+    Paste the configuration above and replace `analytics.example.com` with your domain.
+  </Step>
+
+  <Step title="Enable the site">
+    ```bash
+    sudo ln -s /etc/nginx/sites-available/sparklytics /etc/nginx/sites-enabled/
+    ```
+  </Step>
+
+  <Step title="Obtain SSL certificate">
+    ```bash
+    sudo apt install certbot python3-certbot-nginx
+    sudo certbot --nginx -d analytics.example.com
+    ```
+  </Step>
+
+  <Step title="Test and reload">
+    ```bash
+    sudo nginx -t
+    sudo systemctl reload nginx
+    ```
+  </Step>
+</Steps>
+
+### Nginx with Docker
+
+If Sparklytics runs in Docker:
+
+```nginx
+location / {
+    # If using docker-compose, reference by service name
+    proxy_pass http://sparklytics:3000;
+    
+    # If using host networking or separate containers
+    # proxy_pass http://172.17.0.2:3000;
+}
+```
+
+## Traefik
+
+Traefik provides automatic HTTPS with Docker label-based configuration.
+
+### docker-compose.yml with Traefik
+
+```yaml
+version: '3.8'
+
+services:
+  traefik:
+    image: traefik:v2.10
+    command:
+      - "--api.insecure=false"
+      - "--providers.docker=true"
+      - "--providers.docker.exposedbydefault=false"
+      - "--entrypoints.web.address=:80"
+      - "--entrypoints.websecure.address=:443"
+      - "--certificatesresolvers.letsencrypt.acme.httpchallenge=true"
+      - "--certificatesresolvers.letsencrypt.acme.httpchallenge.entrypoint=web"
+      - "--certificatesresolvers.letsencrypt.acme.email=admin@example.com"
+      - "--certificatesresolvers.letsencrypt.acme.storage=/letsencrypt/acme.json"
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - traefik-certs:/letsencrypt
+    restart: unless-stopped
+
+  sparklytics:
+    image: sparklytics/sparklytics:latest
+    volumes:
+      - sparklytics-data:/data
+    environment:
+      - SPARKLYTICS_AUTH=local
+      - SPARKLYTICS_HTTPS=true
+      - SPARKLYTICS_DUCKDB_MEMORY=1GB
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.sparklytics.rule=Host(`analytics.example.com`)"
+      - "traefik.http.routers.sparklytics.entrypoints=websecure"
+      - "traefik.http.routers.sparklytics.tls.certresolver=letsencrypt"
+      - "traefik.http.services.sparklytics.loadbalancer.server.port=3000"
+      
+      # HTTP to HTTPS redirect
+      - "traefik.http.middlewares.redirect-to-https.redirectscheme.scheme=https"
+      - "traefik.http.routers.sparklytics-http.rule=Host(`analytics.example.com`)"
+      - "traefik.http.routers.sparklytics-http.entrypoints=web"
+      - "traefik.http.routers.sparklytics-http.middlewares=redirect-to-https"
+    restart: unless-stopped
+
+volumes:
+  sparklytics-data:
+  traefik-certs:
+```
+
+Replace `admin@example.com` and `analytics.example.com` with your values.
+
+## Verification
+
+After configuring your reverse proxy, verify everything works:
+
+<Steps>
+  <Step title="Test SSL certificate">
+    ```bash
+    curl -I https://analytics.yourdomain.com
+    ```
+
+    Check for:
+    - `HTTP/2 200` or `HTTP/1.1 200`
+    - Valid SSL certificate (browser shows padlock)
+  </Step>
+
+  <Step title="Verify proxy headers">
+    Ensure Sparklytics receives the real client IP:
+    ```bash
+    docker logs sparklytics 2>&1 | grep "X-Real-IP\|X-Forwarded-For"
+    ```
+  </Step>
+
+  <Step title="Test from your website">
+    Add the tracking snippet to a test page and verify events appear in the dashboard.
+  </Step>
+</Steps>
+
+## Common Issues
+
+<AccordionGroup>
+  <Accordion title="502 Bad Gateway">
+    **Cause:** Reverse proxy can't reach Sparklytics.
+
+    **Fix:**
+    - Verify Sparklytics is running: `docker ps`
+    - Check port is correct (default 3000)
+    - For Docker networks, use service name instead of localhost
+  </Accordion>
+
+  <Accordion title="Certificate errors">
+    **Cause:** Let's Encrypt can't verify domain ownership.
+
+    **Fix:**
+    - Ensure DNS points to your server
+    - Ports 80 and 443 must be publicly accessible
+    - Check firewall rules
+  </Accordion>
+
+  <Accordion title="Login fails with reverse proxy">
+    **Cause:** Cookies not being set correctly.
+
+    **Fix:**
+    - Ensure `SPARKLYTICS_HTTPS=true` when accessed over HTTPS
+    - Verify `X-Forwarded-Proto` header is being set
+    - Check `proxy_set_header Host $host;` in Nginx config
+  </Accordion>
+</AccordionGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="HTTPS Setup" icon="lock" href="/self-hosting/https-setup">
+    Deep dive into SSL/TLS configuration
+  </Card>
+  <Card title="Performance Tuning" icon="gauge-high" href="/self-hosting/performance-tuning">
+    Optimize for high-traffic deployments
+  </Card>
+</CardGroup>

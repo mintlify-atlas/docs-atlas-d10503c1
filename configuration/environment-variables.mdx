@@ -1,0 +1,259 @@
+---
+title: Environment Variables
+description: Complete reference for all Sparklytics environment variables
+---
+
+Sparklytics is configured entirely through environment variables. All variables are optional unless marked as required.
+
+## Core Settings
+
+<ParamField path="SPARKLYTICS_PORT" type="number" default="3000">
+  HTTP server listen port.
+  
+  ```bash
+  SPARKLYTICS_PORT=8080
+  ```
+</ParamField>
+
+<ParamField path="SPARKLYTICS_DATA_DIR" type="string" default="./data">
+  Directory for DuckDB database files and local assets.
+  
+  Must be writable by the Sparklytics process. In Docker, map this to a volume for persistence.
+  
+  ```bash
+  SPARKLYTICS_DATA_DIR=/var/lib/sparklytics/data
+  ```
+</ParamField>
+
+<ParamField path="SPARKLYTICS_PUBLIC_URL" type="string" default="http://localhost:3000">
+  Public-facing URL for your Sparklytics instance.
+  
+  Used for generating tracking script URLs and dashboard links.
+  
+  ```bash
+  SPARKLYTICS_PUBLIC_URL=https://analytics.example.com
+  ```
+</ParamField>
+
+<ParamField path="SPARKLYTICS_MODE" type="string" default="selfhosted">
+  Runtime mode: `selfhosted` or `cloud`.
+  
+  Most users should keep the default. Cloud mode requires additional infrastructure (PostgreSQL, ClickHouse).
+  
+  ```bash
+  SPARKLYTICS_MODE=selfhosted
+  ```
+</ParamField>
+
+## Authentication
+
+See [Authentication](/configuration/authentication) for detailed setup guides.
+
+<ParamField path="SPARKLYTICS_AUTH" type="string" default="local">
+  Authentication mode: `none` | `password` | `local`
+  
+  - `local` (recommended): One-time setup page, then login with stored credentials
+  - `password`: Login with password from `SPARKLYTICS_PASSWORD` env var
+  - `none`: No authentication (development only)
+  
+  ```bash
+  SPARKLYTICS_AUTH=local
+  ```
+</ParamField>
+
+<ParamField path="SPARKLYTICS_PASSWORD" type="string" required={true}>
+  **Required when `SPARKLYTICS_AUTH=password`**
+  
+  Master password for dashboard access. Minimum 12 characters recommended.
+  
+  ```bash
+  SPARKLYTICS_PASSWORD='your-secure-password-here'
+  ```
+</ParamField>
+
+<ParamField path="SPARKLYTICS_HTTPS" type="boolean" default="true">
+  Controls secure cookie flags.
+  
+  Set to `false` only for local development over plain HTTP. Keep `true` when using HTTPS/TLS.
+  
+  ```bash
+  # Local development
+  SPARKLYTICS_HTTPS=false
+  
+  # Production (behind reverse proxy with TLS)
+  SPARKLYTICS_HTTPS=true
+  ```
+</ParamField>
+
+<ParamField path="SPARKLYTICS_SESSION_DAYS" type="number" default="7">
+  JWT session cookie lifetime in days (1-30).
+  
+  ```bash
+  SPARKLYTICS_SESSION_DAYS=14
+  ```
+</ParamField>
+
+<ParamField path="SPARKLYTICS_ARGON2_MEMORY_KB" type="number" default="65536">
+  Argon2id memory cost in KB (64 MB default).
+  
+  Only used in `local` auth mode for password hashing. Higher values increase security but use more RAM during login.
+  
+  ```bash
+  SPARKLYTICS_ARGON2_MEMORY_KB=131072  # 128 MB
+  ```
+</ParamField>
+
+## Database & Performance
+
+<ParamField path="SPARKLYTICS_DUCKDB_MEMORY" type="string" default="1GB">
+  DuckDB query memory limit.
+  
+  Accepts any DuckDB size string: `512MB`, `1GB`, `2GB`, `4GB`, `8GB`, etc.
+  
+  **Recommended values:**
+  - 1-2 GB VPS: `1GB`
+  - 4-8 GB VPS: `2GB`
+  - 16+ GB VPS: `4GB` to `8GB`
+  
+  Setting this explicitly prevents DuckDB from using 80% of system RAM (default behavior).
+  
+  ```bash
+  SPARKLYTICS_DUCKDB_MEMORY=4GB
+  ```
+</ParamField>
+
+<ParamField path="SPARKLYTICS_RETENTION_DAYS" type="number" default="365">
+  How long to keep raw event data (in days).
+  
+  Events older than this are automatically deleted. See [Data Retention](/configuration/data-retention).
+  
+  ```bash
+  SPARKLYTICS_RETENTION_DAYS=180  # 6 months
+  ```
+</ParamField>
+
+## GeoIP & Enrichment
+
+See [GeoIP Setup](/configuration/geoip-setup) for detailed configuration.
+
+<ParamField path="SPARKLYTICS_GEOIP_PATH" type="string" default="./GeoLite2-City.mmdb">
+  Path to MaxMind MMDB-format GeoIP database file.
+  
+  Docker images bundle DB-IP City Lite at `/geoip/dbip-city-lite.mmdb`. For bare-metal installs, download a database first.
+  
+  If the file is missing, Sparklytics still runs but geo fields (country, city, region) are stored as NULL.
+  
+  ```bash
+  # Docker (uses bundled DB-IP)
+  SPARKLYTICS_GEOIP_PATH=/geoip/dbip-city-lite.mmdb
+  
+  # Bare-metal (after running download-geoip.sh)
+  SPARKLYTICS_GEOIP_PATH=./dbip-city-lite.mmdb
+  
+  # MaxMind GeoLite2
+  SPARKLYTICS_GEOIP_PATH=/path/to/GeoLite2-City.mmdb
+  ```
+</ParamField>
+
+## CORS & Security
+
+<ParamField path="SPARKLYTICS_CORS_ORIGINS" type="string">
+  Comma-separated list of allowed origins for analytics query endpoints.
+  
+  `/api/collect` (event ingestion) is always CORS-enabled. This setting controls dashboard API endpoints if you need to access them from a different domain.
+  
+  ```bash
+  SPARKLYTICS_CORS_ORIGINS=https://app.example.com,https://admin.example.com
+  ```
+</ParamField>
+
+## Advanced Settings
+
+<Warning>
+  These settings are rarely needed. Only change them if you understand the implications.
+</Warning>
+
+<ParamField path="SPARKLYTICS_RATE_LIMIT_DISABLE" type="boolean" default="false">
+  **Benchmarking only.** Disables the 60 req/min rate limiter on `/api/collect`.
+  
+  Never enable in production — this makes your instance vulnerable to abuse.
+  
+  ```bash
+  # For load testing only
+  SPARKLYTICS_RATE_LIMIT_DISABLE=true
+  ```
+</ParamField>
+
+## Example Configurations
+
+### Minimal Self-Hosted (Local Auth)
+
+```bash
+SPARKLYTICS_AUTH=local
+SPARKLYTICS_HTTPS=false
+SPARKLYTICS_DATA_DIR=./data
+SPARKLYTICS_DUCKDB_MEMORY=1GB
+```
+
+### Production Behind Reverse Proxy
+
+```bash
+SPARKLYTICS_AUTH=local
+SPARKLYTICS_HTTPS=true
+SPARKLYTICS_PUBLIC_URL=https://analytics.example.com
+SPARKLYTICS_DATA_DIR=/var/lib/sparklytics/data
+SPARKLYTICS_DUCKDB_MEMORY=4GB
+SPARKLYTICS_RETENTION_DAYS=180
+SPARKLYTICS_GEOIP_PATH=/var/lib/sparklytics/dbip-city-lite.mmdb
+```
+
+### Single Password Mode
+
+```bash
+SPARKLYTICS_AUTH=password
+SPARKLYTICS_PASSWORD='your-secure-password-12345'
+SPARKLYTICS_HTTPS=true
+SPARKLYTICS_PUBLIC_URL=https://analytics.example.com
+SPARKLYTICS_DATA_DIR=/var/lib/sparklytics/data
+SPARKLYTICS_DUCKDB_MEMORY=2GB
+```
+
+### Development (No Auth)
+
+```bash
+SPARKLYTICS_AUTH=none
+SPARKLYTICS_HTTPS=false
+SPARKLYTICS_PORT=3000
+SPARKLYTICS_DATA_DIR=./dev-data
+SPARKLYTICS_DUCKDB_MEMORY=1GB
+```
+
+## Docker Compose Example
+
+```yaml
+version: '3.8'
+services:
+  sparklytics:
+    image: sparklytics/sparklytics:latest
+    ports:
+      - "3000:3000"
+    volumes:
+      - sparklytics-data:/data
+    environment:
+      SPARKLYTICS_AUTH: local
+      SPARKLYTICS_HTTPS: "true"
+      SPARKLYTICS_PUBLIC_URL: https://analytics.example.com
+      SPARKLYTICS_DUCKDB_MEMORY: 2GB
+      SPARKLYTICS_RETENTION_DAYS: 365
+      SPARKLYTICS_GEOIP_PATH: /geoip/dbip-city-lite.mmdb
+    restart: unless-stopped
+
+volumes:
+  sparklytics-data:
+```
+
+## See Also
+
+- [Authentication Setup](/configuration/authentication) — Detailed auth mode configuration
+- [GeoIP Setup](/configuration/geoip-setup) — GeoIP database installation
+- [Data Retention](/configuration/data-retention) — Retention policy configuration

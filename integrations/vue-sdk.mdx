@@ -1,0 +1,418 @@
+---
+title: "Vue.js SDK"
+description: "Vue 3 integration with Composition API support and automatic route tracking"
+---
+
+The Vue.js SDK provides seamless analytics for Vue 3 applications with automatic route tracking via Vue Router, composables, and TypeScript support.
+
+<Note>
+  The Vue SDK (`@sparklytics/vue`) is currently in development. This page describes the planned API. For now, use the [HTML snippet](/integrations/html-snippet) for Vue projects.
+</Note>
+
+## Installation
+
+<CodeGroup>
+```bash npm
+npm install @sparklytics/vue
+```
+
+```bash pnpm
+pnpm add @sparklytics/vue
+```
+
+```bash yarn
+yarn add @sparklytics/vue
+```
+</CodeGroup>
+
+## Setup
+
+<Steps>
+  <Step title="Install the plugin">
+    Add the Sparklytics plugin to your Vue app:
+
+    ```typescript main.ts
+    import { createApp } from 'vue'
+    import { createSparklytics } from '@sparklytics/vue'
+    import App from './App.vue'
+    import router from './router'
+
+    const app = createApp(App)
+
+    app.use(createSparklytics({
+      host: 'https://analytics.example.com',
+      websiteId: 'YOUR_WEBSITE_ID',
+      router // Pass your Vue Router instance for automatic tracking
+    }))
+
+    app.use(router)
+    app.mount('#app')
+    ```
+  </Step>
+
+  <Step title="Track custom events with composables">
+    Use the `useSparklytics` composable in your components:
+
+    ```vue SignupButton.vue
+    <script setup lang="ts">
+    import { useSparklytics } from '@sparklytics/vue'
+
+    const { track } = useSparklytics()
+
+    const handleSignup = () => {
+      track('signup_click', { plan: 'pro' })
+      // ... your signup logic
+    }
+    </script>
+
+    <template>
+      <button @click="handleSignup">
+        Get Started
+      </button>
+    </template>
+    ```
+  </Step>
+
+  <Step title="Verify tracking">
+    Navigate between routes. Pageviews should appear in the Sparklytics dashboard automatically.
+  </Step>
+</Steps>
+
+## Configuration Options
+
+Configure the plugin when installing:
+
+```typescript main.ts
+import { createSparklytics } from '@sparklytics/vue'
+import router from './router'
+
+app.use(createSparklytics({
+  host: 'https://analytics.example.com',
+  websiteId: 'abc123',
+  router, // Required for automatic pageview tracking
+  disabled: import.meta.env.DEV, // Disable in development
+  respectDnt: true, // Respect DNT/GPC signals
+  excludeHash: false, // Track hash changes
+  trackLinks: 'outbound', // Track outbound link clicks
+  trackScrollDepth: [25, 50, 75, 100], // Track scroll milestones
+  trackForms: true // Track form submissions
+}))
+```
+
+### Plugin Options
+
+| Option | Type | Required | Description |
+|--------|------|----------|-------------|
+| `host` | `string` | Yes | Your Sparklytics server URL |
+| `websiteId` | `string` | Yes | Website ID from dashboard |
+| `router` | `Router` | Recommended | Vue Router instance for auto-tracking |
+| `disabled` | `boolean` | No | Disable all tracking |
+| `respectDnt` | `boolean` | No | Respect DNT/GPC signals (default: `true`) |
+| `excludeHash` | `boolean` | No | Skip hash-only route changes |
+| `trackLinks` | `boolean \| "outbound"` | No | Track link clicks |
+| `trackScrollDepth` | `boolean \| number[]` | No | Track scroll milestones |
+| `trackForms` | `boolean` | No | Track form submissions |
+
+## Tracking Custom Events
+
+Use the `useSparklytics` composable to access the tracking API:
+
+<Tabs>
+  <Tab title="Composition API">
+    ```vue ProductCard.vue
+    <script setup lang="ts">
+    import { useSparklytics } from '@sparklytics/vue'
+
+    const props = defineProps<{
+      product: {
+        id: string
+        name: string
+        price: number
+      }
+    }>()
+
+    const { track } = useSparklytics()
+
+    const addToCart = () => {
+      track('add_to_cart', {
+        product_id: props.product.id,
+        product_name: props.product.name,
+        price: props.product.price,
+        currency: 'USD'
+      })
+      // ... add to cart logic
+    }
+    </script>
+
+    <template>
+      <button @click="addToCart">
+        Add to Cart - ${{ product.price }}
+      </button>
+    </template>
+    ```
+  </Tab>
+
+  <Tab title="Options API">
+    ```vue NewsletterForm.vue
+    <script lang="ts">
+    import { defineComponent } from 'vue'
+
+    export default defineComponent({
+      methods: {
+        handleSubmit() {
+          this.$sparklytics.track('newsletter_signup')
+          // ... submit logic
+        }
+      }
+    })
+    </script>
+
+    <template>
+      <form @submit.prevent="handleSubmit">
+        <input type="email" placeholder="Your email" />
+        <button type="submit">Subscribe</button>
+      </form>
+    </template>
+    ```
+  </Tab>
+
+  <Tab title="Template Ref">
+    ```vue DownloadButton.vue
+    <script setup lang="ts">
+    import { useSparklytics } from '@sparklytics/vue'
+
+    const { track } = useSparklytics()
+
+    const handleDownload = (filename: string) => {
+      track('file_download', { filename })
+    }
+    </script>
+
+    <template>
+      <a 
+        href="#" 
+        download
+        @click="handleDownload('file.pdf')"
+      >
+        Download File
+      </a>
+    </template>
+    ```
+  </Tab>
+</Tabs>
+
+## Visitor Identification
+
+Identify logged-in users to track their journey across sessions:
+
+<CodeGroup>
+```vue Identify User
+<script setup lang="ts">
+import { useSparklytics } from '@sparklytics/vue'
+import { useRouter } from 'vue-router'
+
+const router = useRouter()
+const { identify } = useSparklytics()
+
+const handleLogin = async (userId: string) => {
+  // After successful login
+  identify(userId)
+  router.push('/dashboard')
+}
+</script>
+
+<template>
+  <LoginForm @submit="handleLogin" />
+</template>
+```
+
+```vue Reset on Logout
+<script setup lang="ts">
+import { useSparklytics } from '@sparklytics/vue'
+import { useRouter } from 'vue-router'
+
+const router = useRouter()
+const { reset } = useSparklytics()
+
+const handleLogout = () => {
+  reset() // Clear visitor ID
+  router.push('/login')
+}
+</script>
+
+<template>
+  <button @click="handleLogout">Logout</button>
+</template>
+```
+</CodeGroup>
+
+## TypeScript Support
+
+The SDK provides full TypeScript support. Define custom event types:
+
+```typescript types/analytics.ts
+import type { UseSparklytics } from '@sparklytics/vue'
+
+type CustomEvents = 
+  | { name: 'signup_click', data: { plan: 'free' | 'pro' | 'enterprise' } }
+  | { name: 'add_to_cart', data: { product_id: string, price: number } }
+  | { name: 'newsletter_signup', data?: never }
+
+export function useTypedAnalytics(): UseSparklytics<CustomEvents> {
+  return useSparklytics<CustomEvents>()
+}
+```
+
+```vue PricingCard.vue
+<script setup lang="ts">
+import { useTypedAnalytics } from '@/types/analytics'
+
+const { track } = useTypedAnalytics()
+
+const selectPlan = (plan: 'free' | 'pro' | 'enterprise') => {
+  track('signup_click', { plan }) // Fully typed!
+}
+</script>
+
+<template>
+  <button @click="selectPlan('pro')">
+    Choose Pro Plan
+  </button>
+</template>
+```
+
+## Environment Variables
+
+Use Vite environment variables:
+
+```bash .env
+VITE_SPARKLYTICS_HOST=https://analytics.example.com
+VITE_SPARKLYTICS_WEBSITE_ID=your-website-id
+```
+
+```typescript main.ts
+import { createSparklytics } from '@sparklytics/vue'
+
+app.use(createSparklytics({
+  host: import.meta.env.VITE_SPARKLYTICS_HOST,
+  websiteId: import.meta.env.VITE_SPARKLYTICS_WEBSITE_ID,
+  router
+}))
+```
+
+## Vue Router Integration
+
+When you pass your `Router` instance to the plugin, pageviews are tracked automatically on every route change:
+
+```typescript router/index.ts
+import { createRouter, createWebHistory } from 'vue-router'
+
+const router = createRouter({
+  history: createWebHistory(),
+  routes: [
+    { path: '/', component: Home },
+    { path: '/pricing', component: Pricing },
+    { path: '/about', component: About }
+  ]
+})
+
+export default router
+```
+
+```typescript main.ts
+import { createSparklytics } from '@sparklytics/vue'
+import router from './router'
+
+app.use(createSparklytics({
+  host: 'https://analytics.example.com',
+  websiteId: 'abc123',
+  router // Automatic pageview tracking enabled
+}))
+```
+
+<Tip>
+  The SDK automatically captures route `meta` fields like `title` if defined in your route configuration.
+</Tip>
+
+## Nuxt 3 Support
+
+For Nuxt 3, use the Nuxt module (coming soon):
+
+```typescript nuxt.config.ts
+export default defineNuxtConfig({
+  modules: ['@sparklytics/nuxt'],
+  sparklytics: {
+    host: 'https://analytics.example.com',
+    websiteId: 'abc123'
+  }
+})
+```
+
+Alternatively, use the HTML snippet in `app.vue`:
+
+```vue app.vue
+<template>
+  <div>
+    <NuxtPage />
+  </div>
+</template>
+
+<script setup>
+useHead({
+  script: [
+    {
+      defer: true,
+      src: 'https://analytics.example.com/s.js',
+      'data-website-id': 'abc123'
+    }
+  ]
+})
+</script>
+```
+
+## Performance
+
+- **Bundle size**: < 5 KB gzipped
+- **Tree-shakeable**: Unused features are removed
+- **Zero runtime overhead**: Async tracking
+- **SSR compatible**: Works with Nuxt 3 and other SSR frameworks
+
+## Migration from HTML Snippet
+
+If you're currently using the HTML snippet, migration is simple:
+
+<Steps>
+  <Step title="Remove the script tag">
+    Delete the `<script>` tag from `index.html`:
+    
+    ```diff
+    - <script defer src="https://analytics.example.com/s.js" data-website-id="abc123"></script>
+    ```
+  </Step>
+
+  <Step title="Install the Vue SDK">
+    ```bash
+    npm install @sparklytics/vue
+    ```
+  </Step>
+
+  <Step title="Replace window.sparklytics calls">
+    ```diff
+    - window.sparklytics?.track('signup_click', { plan: 'pro' })
+    + const { track } = useSparklytics()
+    + track('signup_click', { plan: 'pro' })
+    ```
+  </Step>
+</Steps>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="HTML Snippet" icon="code" href="/integrations/html-snippet">
+    Use the snippet for Nuxt 3 or static Vue sites
+  </Card>
+
+  <Card title="Custom Integration" icon="brackets-curly" href="/integrations/custom-integration">
+    Build a custom integration using the API
+  </Card>
+</CardGroup>

@@ -1,0 +1,358 @@
+---
+title: API Overview
+description: Core API concepts, base URL, rate limits, and request/response formats
+---
+
+## Introduction
+
+The Sparklytics API provides programmatic access to analytics data and event ingestion. The API is built with Rust (Axum 0.8) and serves both the analytics dashboard and public endpoints.
+
+## Base URL
+
+All API endpoints are relative to your Sparklytics installation:
+
+```
+https://analytics.example.com/api
+```
+
+For local development:
+
+```
+http://localhost:3000/api
+```
+
+Configure your public URL with the `SPARKLYTICS_PUBLIC_URL` environment variable (defaults to `http://localhost:3000`).
+
+## Authentication
+
+The Sparklytics API uses two authentication methods depending on the endpoint:
+
+- **Session cookies** - Dashboard endpoints require JWT session cookies obtained via login
+- **API keys** - Programmatic access to query endpoints (format: `spk_selfhosted_*` for self-hosted)
+
+See the [Authentication](/api/authentication) page for detailed information.
+
+## Rate Limits
+
+### Event Collection Endpoint
+
+The `POST /api/collect` endpoint enforces rate limiting per client IP address:
+
+<ParamField path="rate_limit" type="string" default="60 requests/minute">
+  Rate limit applied per IP address on the event ingestion endpoint
+</ParamField>
+
+Rate limit headers are included in responses:
+
+```http
+X-RateLimit-Limit: 60
+X-RateLimit-Remaining: 58
+X-RateLimit-Reset: 1234567890
+```
+
+When the rate limit is exceeded, the API returns:
+
+<ResponseField name="status" type="number">
+  429
+</ResponseField>
+
+<ResponseField name="error" type="object">
+  <ResponseField name="code" type="string">
+    `rate_limited`
+  </ResponseField>
+  <ResponseField name="message" type="string">
+    Rate limit exceeded for this IP address
+  </ResponseField>
+</ResponseField>
+
+### Login Endpoint
+
+The `POST /api/auth/login` endpoint enforces stricter rate limiting:
+
+- **5 failed attempts** per 15 minutes per IP address
+- Returns `429 Too Many Requests` with `Retry-After` header (900 seconds)
+
+## Request Format
+
+### Content Type
+
+All POST/PUT requests must include:
+
+```http
+Content-Type: application/json
+```
+
+### Body Size Limits
+
+<ParamField path="collect_endpoint" type="number" default="102400">
+  Maximum body size for `POST /api/collect`: **100 KB** (102,400 bytes)
+</ParamField>
+
+<ParamField path="event_data" type="number" default="4096">
+  Maximum size for a single event's `event_data` field: **4 KB** (4,096 bytes)
+</ParamField>
+
+<ParamField path="batch_size" type="number" default="50">
+  Maximum events per batch request: **50 events**
+</ParamField>
+
+### Example Request
+
+```bash
+curl -X POST https://analytics.example.com/api/collect \
+  -H "Content-Type: application/json" \
+  -d '{
+    "website_id": "site_abc123",
+    "event_type": "pageview",
+    "url": "https://example.com/pricing",
+    "referrer": "https://google.com"
+  }'
+```
+
+## Response Format
+
+### Success Responses
+
+Most endpoints return JSON with a `data` wrapper:
+
+```json
+{
+  "data": {
+    // Response payload
+  }
+}
+```
+
+Query endpoints with pagination include:
+
+```json
+{
+  "data": [...],
+  "pagination": {
+    "total": 150,
+    "limit": 20,
+    "offset": 0,
+    "has_more": true
+  }
+}
+```
+
+### Event Collection Response
+
+The `POST /api/collect` endpoint returns a minimal acknowledgment:
+
+<ResponseField name="status" type="number">
+  202 Accepted
+</ResponseField>
+
+<ResponseField name="body" type="object">
+  <ResponseField name="ok" type="boolean">
+    Always `true` for successful ingestion
+  </ResponseField>
+</ResponseField>
+
+<ResponseField name="headers" type="object">
+  <ResponseField name="x-sparklytics-ingest-ack" type="string">
+    `queued` - Event has been queued for processing
+  </ResponseField>
+  <ResponseField name="x-sparklytics-ingest-queue-events" type="number">
+    Current number of events in the ingest queue
+  </ResponseField>
+  <ResponseField name="x-sparklytics-ingest-queue-capacity" type="number">
+    Maximum queue capacity
+  </ResponseField>
+</ResponseField>
+
+Events are buffered and flushed to storage:
+- Every **5 seconds** (default flush interval)
+- When **100 events** accumulate (max buffer size)
+
+### Error Responses
+
+Errors follow a consistent format:
+
+```json
+{
+  "error": {
+    "code": "error_code",
+    "message": "Human-readable error message"
+  }
+}
+```
+
+#### HTTP Status Codes
+
+| Status | Code | Description |
+|--------|------|-------------|
+| 400 | `bad_request` | Invalid request parameters |
+| 400 | `batch_too_large` | Batch exceeds 50 events |
+| 401 | `unauthorized` | Missing or invalid authentication |
+| 404 | `not_found` | Resource not found (e.g., unknown `website_id`) |
+| 410 | `gone` | Setup already complete (setup endpoint) |
+| 413 | `payload_too_large` | Event data exceeds 4 KB limit |
+| 429 | `rate_limited` | Rate limit exceeded |
+| 500 | `internal_server_error` | Server error |
+
+## CORS Configuration
+
+Configure allowed origins for cross-origin requests:
+
+```bash
+SPARKLYTICS_CORS_ORIGINS=https://example.com,https://app.example.com
+```
+
+Comma-separated list of allowed origins. Empty by default (no CORS restrictions).
+
+## IP Address Extraction
+
+The API extracts client IP addresses for:
+- Rate limiting
+- Geo-location enrichment
+- Visitor ID computation
+
+### Trusted Proxy Support
+
+Configure trusted proxy CIDRs:
+
+```bash
+SPARKLYTICS_TRUSTED_PROXIES=10.0.0.0/8,172.16.0.0/12
+```
+
+When the request originates from a trusted proxy, the API uses `X-Forwarded-For` header. Otherwise, it uses the direct socket IP address.
+
+## Data Enrichment
+
+Events submitted to `POST /api/collect` are automatically enriched with:
+
+### Visitor ID
+
+**Server-computed** (default):
+```
+sha256(salt_epoch + ip + user_agent)[0:16]
+```
+- Salt rotates daily at midnight UTC (`salt_epoch = unix_timestamp / 86400`)
+- Results in 16 hex characters
+
+**Client-supplied** (optional):
+- Provide `visitor_id` field in the request (max 64 characters)
+- Stored in `localStorage` as `sparklytics_visitor_id` by SDK
+
+### Geographic Data
+
+Extracted from client IP using MaxMind-compatible MMDB database:
+
+<ResponseField name="country" type="string">
+  ISO country code (e.g., `US`, `GB`)
+</ResponseField>
+
+<ResponseField name="region" type="string">
+  State/region name (e.g., `California`)
+</ResponseField>
+
+<ResponseField name="city" type="string">
+  City name (e.g., `San Francisco`)
+</ResponseField>
+
+Configure GeoIP database path:
+
+```bash
+SPARKLYTICS_GEOIP_PATH=./GeoLite2-City.mmdb
+```
+
+If the database is missing, events are stored with `NULL` geo fields (non-fatal).
+
+### User Agent Parsing
+
+Extracted via the [woothee](https://github.com/woothee/woothee-rust) library:
+
+<ResponseField name="browser" type="string">
+  Browser name (e.g., `Chrome`, `Firefox`)
+</ResponseField>
+
+<ResponseField name="browser_version" type="string">
+  Browser version (e.g., `120.0.0`)
+</ResponseField>
+
+<ResponseField name="os" type="string">
+  Operating system (e.g., `Windows`, `macOS`)
+</ResponseField>
+
+<ResponseField name="os_version" type="string">
+  OS version (e.g., `10.15.7`)
+</ResponseField>
+
+<ResponseField name="device_type" type="string">
+  Device category: `desktop`, `mobile`, or `tablet`
+</ResponseField>
+
+### UTM Parameters
+
+Extracted from URL query string as fallback:
+
+- `utm_source`
+- `utm_medium`
+- `utm_campaign`
+- `utm_term`
+- `utm_content`
+
+Explicit payload fields take precedence over URL-extracted values.
+
+### Referrer Domain
+
+Parsed from the `referrer` URL field:
+
+```
+https://www.google.com/search?q=analytics
+  → referrer_domain: google.com
+```
+
+## Storage Backend
+
+Sparklytics uses different storage backends based on deployment mode:
+
+### Self-Hosted Mode
+
+**DuckDB** (embedded, single binary):
+- No separate database process
+- Data stored in `./data` directory (configurable via `SPARKLYTICS_DATA_DIR`)
+- Memory limit: configurable via `SPARKLYTICS_DUCKDB_MEMORY` (default: `1GB`)
+- Recommended for 4-32 GB VPS: set to `2GB`-`8GB` for better performance
+
+### Cloud Mode
+
+**ClickHouse** for analytics data:
+- Horizontal scaling for high-volume workloads
+- 10-68x faster at 100k events, 47-239x at 1M events (vs DuckDB)
+- Storage: ~48 MB per 1M events (5.8x more efficient than DuckDB)
+
+**PostgreSQL** for metadata:
+- Multi-tenancy support (`tenant_id` column)
+- User/website/API key management
+
+## Data Retention
+
+Configure retention period:
+
+```bash
+SPARKLYTICS_RETENTION_DAYS=365
+```
+
+Default: **365 days**. Raw events older than this are automatically deleted.
+
+## Health Check
+
+Monitor service health:
+
+```bash
+curl https://analytics.example.com/api/health
+```
+
+**Response:**
+
+```json
+{
+  "status": "healthy"
+}
+```
+
+Returns `200 OK` when the service is operational.

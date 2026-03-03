@@ -1,0 +1,586 @@
+---
+title: User Journey Analysis
+description: Explore user paths through your site with visual journey mapping showing what users do before and after key pages or events.
+---
+
+## Overview
+
+Journey Analysis reveals the paths users take through your site by showing what happens **before** or **after** a specific page or event (the "anchor").
+
+Unlike funnels (which require predefined steps), journey analysis discovers actual user behavior patterns from your data.
+
+<Frame>
+  <img src="/images/journey-visualization.png" alt="Journey tree showing user paths" />
+</Frame>
+
+## How It Works
+
+### Anchor-Based Exploration
+
+Pick an **anchor point** (page or event), then explore paths in either direction:
+
+- **Next**: What do users do *after* visiting this page?
+- **Previous**: What do users do *before* visiting this page?
+
+### Example: Next Journey
+
+**Anchor**: `/pricing` (page)
+
+Result:
+
+```
+/pricing (anchor)
+├─ /signup (342 visitors, 45%)
+│  ├─ /dashboard (201 visitors, 26%)
+│  └─ /onboarding (89 visitors, 12%)
+├─ /features (198 visitors, 26%)
+│  └─ /signup (134 visitors, 18%)
+└─ /blog (156 visitors, 20%)
+   └─ /pricing (67 visitors, 9%)
+```
+
+### Example: Previous Journey
+
+**Anchor**: `signup_complete` (event)
+
+Result:
+
+```
+signup_complete (anchor)
+├─ from /signup (512 visitors, 68%)
+│  ├─ from /pricing (389 visitors, 52%)
+│  └─ from /features (98 visitors, 13%)
+└─ from /trial (234 visitors, 31%)
+   └─ from homepage (187 visitors, 25%)
+```
+
+## API Reference
+
+### Endpoint
+
+```bash
+GET /api/websites/{website_id}/journey
+```
+
+### Query Parameters
+
+<ParamField query="anchor_type" type="string" required>
+  Type of anchor: `page` or `event`
+</ParamField>
+
+<ParamField query="anchor_value" type="string" required>
+  The page path (e.g., `/pricing`) or event name (e.g., `signup_complete`). Maximum 500 characters.
+</ParamField>
+
+<ParamField query="direction" type="string" required>
+  Direction to explore: `next` or `previous`
+</ParamField>
+
+<ParamField query="max_depth" type="number" default="3">
+  How many levels to traverse (1-5)
+</ParamField>
+
+<ParamField query="start_date" type="string" required>
+  Start date in `YYYY-MM-DD` format
+</ParamField>
+
+<ParamField query="end_date" type="string" required>
+  End date in `YYYY-MM-DD` format
+</ParamField>
+
+### Example Request
+
+```bash
+GET /api/websites/{website_id}/journey?
+  anchor_type=page&
+  anchor_value=/pricing&
+  direction=next&
+  max_depth=3&
+  start_date=2026-02-01&
+  end_date=2026-03-01
+```
+
+### Response
+
+```json
+{
+  "data": {
+    "anchor": {
+      "type": "page",
+      "value": "/pricing",
+      "total_visitors": 1250
+    },
+    "branches": [
+      {
+        "value": "/signup",
+        "type": "page",
+        "visitors": 567,
+        "percentage": 45.36,
+        "children": [
+          {
+            "value": "/dashboard",
+            "type": "page",
+            "visitors": 312,
+            "percentage": 24.96,
+            "children": []
+          },
+          {
+            "value": "/onboarding",
+            "type": "page",
+            "visitors": 198,
+            "percentage": 15.84,
+            "children": []
+          }
+        ]
+      },
+      {
+        "value": "/features",
+        "type": "page",
+        "visitors": 423,
+        "percentage": 33.84,
+        "children": [
+          {
+            "value": "/signup",
+            "type": "page",
+            "visitors": 267,
+            "percentage": 21.36,
+            "children": []
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+
+### Response Fields
+
+<ResponseField name="anchor.total_visitors" type="number">
+  Total visitors who interacted with the anchor in the date range
+</ResponseField>
+
+<ResponseField name="branches[].visitors" type="number">
+  Number of unique visitors who took this path
+</ResponseField>
+
+<ResponseField name="branches[].percentage" type="number">
+  Percentage of anchor visitors who took this path (visitors / total_visitors × 100)
+</ResponseField>
+
+<ResponseField name="branches[].children" type="array">
+  Nested paths at the next depth level (recursive structure)
+</ResponseField>
+
+## Direction Modes
+
+### Next (Forward)
+
+Shows what users do **after** the anchor.
+
+Use cases:
+- **Landing page optimization**: Where do users go after landing?
+- **Content discovery**: What do readers explore next?
+- **Conversion paths**: What pages lead to signup/purchase?
+
+```bash
+GET .../journey?
+  anchor_type=page&
+  anchor_value=/blog/analytics-guide&
+  direction=next
+```
+
+### Previous (Backward)
+
+Shows what users did **before** the anchor.
+
+Use cases:
+- **Attribution**: How did users discover this feature?
+- **Funnel analysis**: What paths lead to conversion?
+- **Entry point analysis**: Where do successful users start?
+
+```bash
+GET .../journey?
+  anchor_type=event&
+  anchor_value=purchase&
+  direction=previous
+```
+
+## Depth Levels
+
+Control how many steps to explore:
+
+<Tabs>
+  <Tab title="Depth 1">
+    ```
+    anchor
+    ├─ step A (direct next/previous)
+    └─ step B
+    ```
+  </Tab>
+  <Tab title="Depth 3 (default)">
+    ```
+    anchor
+    ├─ step A
+    │  ├─ step A1
+    │  │  └─ step A1a
+    │  └─ step A2
+    └─ step B
+       └─ step B1
+          └─ step B1a
+    ```
+  </Tab>
+  <Tab title="Depth 5 (max)">
+    ```
+    anchor
+    └─ A → A1 → A1a → A1a1 → A1a1x
+    ```
+  </Tab>
+</Tabs>
+
+From `crates/sparklytics-server/src/routes/journey.rs:21`:
+
+```rust
+const DEFAULT_DEPTH: u32 = 3;
+
+if !(1..=5).contains(&max_depth) {
+    return Err(AppError::BadRequest(
+        "max_depth must be between 1 and 5".to_string(),
+    ));
+}
+```
+
+## Validation Rules
+
+### Anchor Type
+
+From `crates/sparklytics-server/src/routes/journey.rs:49`:
+
+```rust
+fn parse_anchor_type(raw: Option<&str>) -> Result<AnchorType, AppError> {
+    match raw.map(str::trim) {
+        Some("page") => Ok(AnchorType::Page),
+        Some("event") => Ok(AnchorType::Event),
+        Some(_) => Err(AppError::BadRequest(
+            "anchor_type must be either 'page' or 'event'".to_string(),
+        )),
+        None => Err(AppError::BadRequest("anchor_type is required".to_string())),
+    }
+}
+```
+
+### Anchor Value
+
+- **Required**: Cannot be empty
+- **Maximum length**: 500 characters
+- **Trimmed**: Leading/trailing whitespace removed
+
+```rust
+let anchor_value = query
+    .anchor_value
+    .as_deref()
+    .map(str::trim)
+    .filter(|value| !value.is_empty())
+    .ok_or_else(|| AppError::BadRequest("anchor_value is required".to_string()))?;
+
+if anchor_value.len() > 500 {
+    return Err(AppError::BadRequest(
+        "anchor_value must be at most 500 characters".to_string(),
+    ));
+}
+```
+
+## Filtering Journey Data
+
+Apply standard filters to analyze journeys for specific segments:
+
+```bash
+GET .../journey?
+  anchor_type=page&
+  anchor_value=/pricing&
+  direction=next&
+  filter_country=US&
+  filter_device=mobile
+```
+
+### Available Filters
+
+- `filter_country`
+- `filter_region`
+- `filter_city`
+- `filter_browser`
+- `filter_os`
+- `filter_device`
+- `filter_utm_source`
+- `filter_utm_medium`
+- `filter_utm_campaign`
+
+## Performance & Rate Limiting
+
+Journey queries are computationally expensive and rate-limited:
+
+```rust
+const JOURNEY_SEMAPHORE_TIMEOUT: Duration = Duration::from_secs(5);
+
+let _permit = tokio::time::timeout(
+    JOURNEY_SEMAPHORE_TIMEOUT,
+    state.journey_semaphore.acquire(),
+)
+.await
+.map_err(|_| AppError::RateLimited)?;
+```
+
+If too many concurrent journey queries are running, requests return `429 Too Many Requests`.
+
+### Optimization Tips
+
+- **Reduce max_depth**: Depth 5 is much slower than depth 2
+- **Narrow date range**: Shorter ranges = faster queries
+- **Add filters**: Reduce dataset size before computing paths
+- **Cache results**: Journey data changes slowly — cache for 5-10 minutes
+
+## Dashboard Visualization
+
+The journey UI provides an interactive tree view:
+
+### Controls
+
+From `dashboard/components/journey/JourneyControls.tsx`:
+
+- **Anchor type selector**: Page or Event
+- **Anchor value input**: Free text or dropdown of popular pages/events
+- **Direction toggle**: Next or Previous
+- **Depth slider**: 1-5 levels
+
+### Branch List
+
+Each branch row shows:
+
+```tsx
+<div className="flex items-center gap-3">
+  <div className="flex-1">
+    <p className="text-sm font-medium">{branch.value}</p>
+    <p className="text-xs text-ink-3">
+      {branch.visitors.toLocaleString()} visitors · {branch.percentage.toFixed(1)}%
+    </p>
+  </div>
+  <button onClick={() => handlePickNode(branch.value)}>
+    Explore from here
+  </button>
+</div>
+```
+
+Click **"Explore from here"** to pivot to a new anchor.
+
+## Use Cases
+
+### Landing Page Optimization
+
+Find out where users go after landing on key pages:
+
+```bash
+GET .../journey?
+  anchor_type=page&
+  anchor_value=/&
+  direction=next&
+  max_depth=2
+```
+
+Optimize CTAs based on actual user paths.
+
+### Feature Discovery
+
+See how users discover a feature:
+
+```bash
+GET .../journey?
+  anchor_type=page&
+  anchor_value=/features/analytics&
+  direction=previous&
+  max_depth=3
+```
+
+Improve navigation to surface this feature earlier.
+
+### Content Recommendations
+
+Identify related content users explore together:
+
+```bash
+GET .../journey?
+  anchor_type=page&
+  anchor_value=/blog/getting-started&
+  direction=next&
+  max_depth=2
+```
+
+Add "Related Articles" based on actual user behavior.
+
+### Conversion Attribution
+
+Trace the path users take before converting:
+
+```bash
+GET .../journey?
+  anchor_type=event&
+  anchor_value=purchase&
+  direction=previous&
+  max_depth=5
+```
+
+Understand which content drives conversions.
+
+### Drop-Off Analysis
+
+Find where users exit after visiting a page:
+
+```bash
+GET .../journey?
+  anchor_type=page&
+  anchor_value=/pricing&
+  direction=next&
+  max_depth=1
+```
+
+If most users exit (no branches), investigate UX issues.
+
+## Best Practices
+
+### Start with Depth 2-3
+
+Deeper paths take longer to compute and are harder to interpret:
+
+```bash
+# Good: Clear, actionable insights
+max_depth=2
+
+# Overwhelming: Too many branches
+max_depth=5
+```
+
+### Use Specific Anchors
+
+Page paths are more actionable than event names:
+
+```bash
+# Good: Specific page
+anchor_value=/pricing
+
+# Bad: Vague event
+anchor_value=click
+```
+
+### Combine with Filters
+
+Segment journeys by device or traffic source:
+
+```bash
+# Mobile users only
+filter_device=mobile
+
+# Organic search traffic
+filter_utm_source=google&filter_utm_medium=organic
+```
+
+### Iterate with Pivot
+
+Use the "Explore from here" feature to drill deeper:
+
+1. Start: `/pricing` → next
+2. Find: Most users go to `/signup`
+3. Pivot: `/signup` → next
+4. Find: Most users go to `/onboarding`
+5. Optimize: Improve the `/onboarding` experience
+
+## Common Patterns
+
+### Loop Detection
+
+Users may revisit the same page:
+
+```
+/pricing
+├─ /features
+│  └─ /pricing (loop)
+└─ /blog
+   └─ /pricing (loop)
+```
+
+Loops are included in results (they represent real user behavior).
+
+### Mixed Page + Event Paths
+
+Journeys can include both pages and events:
+
+```
+/features (page)
+├─ video_play (event)
+│  └─ /pricing (page)
+└─ demo_request (event)
+   └─ /contact (page)
+```
+
+### Dead Ends
+
+Branches with no children indicate exits:
+
+```
+/pricing
+├─ /signup (567 visitors)
+│  └─ /dashboard (312 visitors) ← session ended
+└─ /features (423 visitors) ← session ended
+```
+
+## Troubleshooting
+
+### "No data found"
+
+If the response has no branches:
+
+```json
+{
+  "data": {
+    "anchor": { "total_visitors": 0 },
+    "branches": []
+  }
+}
+```
+
+Causes:
+- Anchor doesn't exist in the date range
+- Typo in `anchor_value`
+- Filters too restrictive
+
+Solutions:
+- Verify the anchor exists in your data
+- Check spelling (case-sensitive)
+- Remove filters temporarily
+
+### "Rate limited"
+
+HTTP 429 response:
+
+```json
+{
+  "error": "Too many requests. Please try again later."
+}
+```
+
+Causes:
+- Too many concurrent journey queries
+- Semaphore queue full
+
+Solutions:
+- Wait 5 seconds and retry
+- Reduce `max_depth` to speed up queries
+- Cache results on the client side
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Funnels" icon="filter" href="/features/funnels">
+    Define specific conversion paths to track
+  </Card>
+  <Card title="Sessions" icon="clock" href="/features/sessions">
+    View individual user session timelines
+  </Card>
+</CardGroup>

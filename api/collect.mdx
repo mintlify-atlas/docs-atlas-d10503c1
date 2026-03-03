@@ -1,0 +1,414 @@
+---
+title: "Event Collection"
+description: "Ingest pageviews and custom events via POST /api/collect"
+---
+
+## POST /api/collect
+
+Ingest a single event or a batch of up to 50 events. This is the core endpoint used by the Sparklytics SDK and direct integrations.
+
+### Authentication
+
+None required. Events for unknown `website_id` values are rejected with `404 Not Found`.
+
+### Rate Limits
+
+- **60 requests/minute per IP address**
+- Enforced via Tower middleware
+- Response headers include:
+  - `X-RateLimit-Limit`: Maximum requests per window
+  - `X-RateLimit-Remaining`: Remaining requests
+  - `X-RateLimit-Reset`: Unix timestamp when limit resets
+- Returns `429 Too Many Requests` when exceeded
+
+### Payload Limits
+
+- **Maximum body size**: 100 KB (102,400 bytes)
+- **Maximum batch size**: 50 events per request
+- **Maximum `event_data` size**: 4 KB (4,096 bytes) per event when serialized to JSON string
+- Returns `400 Bad Request` if limits are exceeded
+
+## Single Event
+
+Send a single event object in the request body.
+
+### Request Body
+
+<ParamField body="website_id" type="string" required>
+  The website identifier created in the dashboard (UUID format).
+</ParamField>
+
+<ParamField body="type" type="string" required>
+  Event type. Use `"pageview"` for page visits or `"event"` for custom events.
+</ParamField>
+
+<ParamField body="url" type="string" required>
+  Full URL of the page where the event occurred (e.g., `"https://example.com/pricing"`).
+</ParamField>
+
+<ParamField body="referrer" type="string">
+  Referrer URL. Server automatically extracts the domain into `referrer_domain`.
+</ParamField>
+
+<ParamField body="screen" type="string">
+  Combined screen resolution string (e.g., `"1920x1080"`).
+</ParamField>
+
+<ParamField body="screen_width" type="number">
+  Screen width in pixels. If both `screen_width` and `screen_height` are provided and `screen` is absent, the server combines them as `"{width}x{height}"`.
+</ParamField>
+
+<ParamField body="screen_height" type="number">
+  Screen height in pixels.
+</ParamField>
+
+<ParamField body="language" type="string">
+  Browser language code (e.g., `"en-US"`, `"fr-FR"`).
+</ParamField>
+
+<ParamField body="event_name" type="string">
+  Custom event name (e.g., `"signup_click"`, `"form_submit"`). Required when `type="event"`.
+</ParamField>
+
+<ParamField body="event_data" type="object">
+  Custom event metadata as a JSON object (e.g., `{"plan": "pro", "amount": 49}`). Server serializes to a string before storage. Maximum 4 KB when serialized.
+</ParamField>
+
+<ParamField body="utm_source" type="string">
+  UTM source parameter. If not provided, server attempts to extract from URL query string.
+</ParamField>
+
+<ParamField body="utm_medium" type="string">
+  UTM medium parameter. Falls back to URL extraction.
+</ParamField>
+
+<ParamField body="utm_campaign" type="string">
+  UTM campaign parameter. Falls back to URL extraction.
+</ParamField>
+
+<ParamField body="utm_term" type="string">
+  UTM term parameter. Falls back to URL extraction.
+</ParamField>
+
+<ParamField body="utm_content" type="string">
+  UTM content parameter. Falls back to URL extraction.
+</ParamField>
+
+<ParamField body="visitor_id" type="string">
+  Optional client-supplied visitor ID for cross-session stitching (max 64 characters).
+  
+  When present, the server uses this instead of computing from IP + User-Agent. Should be a hashed/tokenized identifier, never a raw email or user ID.
+  
+  If omitted or empty, server computes: `sha256(salt_epoch + ip + user_agent)[0:16]` (16 hex characters). Salt rotates daily at midnight UTC.
+</ParamField>
+
+### Example Request
+
+```bash
+curl -X POST https://analytics.example.com/api/collect \
+  -H "Content-Type: application/json" \
+  -d '{
+    "website_id": "550e8400-e29b-41d4-a716-446655440000",
+    "type": "pageview",
+    "url": "https://example.com/pricing",
+    "referrer": "https://google.com/search?q=analytics",
+    "screen": "1920x1080",
+    "language": "en-US"
+  }'
+```
+
+### Example Custom Event
+
+```bash
+curl -X POST https://analytics.example.com/api/collect \
+  -H "Content-Type: application/json" \
+  -d '{
+    "website_id": "550e8400-e29b-41d4-a716-446655440000",
+    "type": "event",
+    "url": "https://example.com/signup",
+    "event_name": "signup_click",
+    "event_data": {
+      "plan": "pro",
+      "amount": 49,
+      "currency": "USD"
+    }
+  }'
+```
+
+## Batch Ingestion
+
+Send an array of events in a single request (maximum 50 events).
+
+### Request Body
+
+Send a JSON array of event objects. Each object has the same schema as the single event request.
+
+### Batch Rules
+
+- Maximum **50 events** per batch
+- All events must belong to known websites
+- In cloud mode, all events must belong to websites owned by the same tenant
+- Returns `400 Bad Request` with error code `batch_too_large` if limit is exceeded
+
+### Example Batch Request
+
+```bash
+curl -X POST https://analytics.example.com/api/collect \
+  -H "Content-Type: application/json" \
+  -d '[
+    {
+      "website_id": "550e8400-e29b-41d4-a716-446655440000",
+      "type": "pageview",
+      "url": "https://example.com/home",
+      "screen": "1920x1080"
+    },
+    {
+      "website_id": "550e8400-e29b-41d4-a716-446655440000",
+      "type": "event",
+      "url": "https://example.com/signup",
+      "event_name": "form_submit",
+      "event_data": {"step": 1}
+    },
+    {
+      "website_id": "550e8400-e29b-41d4-a716-446655440000",
+      "type": "pageview",
+      "url": "https://example.com/pricing",
+      "screen": "1920x1080"
+    }
+  ]'
+```
+
+## Response
+
+Successful ingestion returns `202 Accepted` (the event is queued for processing).
+
+### Response Fields
+
+<ResponseField name="ok" type="boolean">
+  Always `true` when the request is accepted.
+</ResponseField>
+
+### Response Headers
+
+<ResponseField name="x-sparklytics-ingest-ack" type="string">
+  Always `"queued"` to confirm the event was accepted into the ingestion queue.
+</ResponseField>
+
+<ResponseField name="x-sparklytics-ingest-queue-events" type="number">
+  Current number of events waiting in the ingestion queue.
+</ResponseField>
+
+<ResponseField name="x-sparklytics-ingest-queue-capacity" type="number">
+  Maximum capacity of the ingestion queue.
+</ResponseField>
+
+### Example Response
+
+```json
+{
+  "ok": true
+}
+```
+
+**Response headers:**
+
+```http
+HTTP/1.1 202 Accepted
+Content-Type: application/json
+x-sparklytics-ingest-ack: queued
+x-sparklytics-ingest-queue-events: 12
+x-sparklytics-ingest-queue-capacity: 10000
+```
+
+## Server-Side Enrichment
+
+The server automatically enriches every event with additional metadata:
+
+### Visitor Identification
+
+- **`visitor_id`**: 16-character hex string derived from `sha256(salt_epoch + ip + user_agent)[0:16]`
+- Salt rotates daily at midnight UTC (`salt_epoch = floor(unix_timestamp / 86400)`)
+- Client can override by providing explicit `visitor_id` in request (max 64 chars)
+
+### Geographic Data (GeoIP)
+
+Extracted from client IP using MaxMind GeoLite2-City or DB-IP City Lite database:
+
+- **`country`**: ISO country code (e.g., `"US"`, `"FR"`)
+- **`region`**: Region/state name (e.g., `"California"`)
+- **`city`**: City name (e.g., `"San Francisco"`)
+
+If the GeoIP database is missing, these fields are stored as `NULL` (non-fatal).
+
+### User Agent Parsing
+
+Parsed via the `woothee` crate:
+
+- **`browser`**: Browser name (e.g., `"Chrome"`, `"Firefox"`)
+- **`browser_version`**: Version string (e.g., `"120.0.0"`)
+- **`os`**: Operating system (e.g., `"Mac OSX"`, `"Windows"`)
+- **`os_version`**: OS version (e.g., `"10.15.7"`)
+- **`device_type`**: `"desktop"`, `"mobile"`, or `"tablet"`
+
+### UTM Parameters
+
+If not explicitly provided in the request body, the server extracts UTM parameters from the URL query string:
+
+- `utm_source`
+- `utm_medium`
+- `utm_campaign`
+- `utm_term`
+- `utm_content`
+
+Explicit payload fields take precedence over URL-extracted values.
+
+### Session Resolution
+
+Sessions are resolved asynchronously in the ingest worker using a 30-minute inactivity timeout:
+
+- Events from the same `visitor_id` within 30 minutes are grouped into a session
+- New session created if gap > 30 minutes or if referrer domain changes
+- No cookies required — session logic is entirely server-side
+
+### Bot Detection
+
+Each event is classified using configurable bot detection rules:
+
+- **`is_bot`**: Boolean flag
+- **`bot_score`**: Integer score (0-100)
+- **`bot_reason`**: Human-readable classification reason
+
+Bot classification considers:
+
+- User-Agent patterns
+- Presence of `Accept` and `Accept-Language` headers
+- IP-based overrides (configured per website)
+- Visitor ID patterns
+
+## Error Responses
+
+### 400 Bad Request
+
+```json
+{
+  "error": "batch_too_large",
+  "message": "Batch size 75 exceeds maximum of 50 events"
+}
+```
+
+**Causes:**
+
+- Batch size exceeds 50 events
+- Empty batch array
+- `event_data` exceeds 4 KB when serialized
+- Missing required fields
+- Invalid JSON structure
+
+### 404 Not Found
+
+```json
+{
+  "error": "not_found",
+  "message": "Unknown website_id: 550e8400-e29b-41d4-a716-446655440000"
+}
+```
+
+**Cause:** The `website_id` does not exist in the database.
+
+### 413 Payload Too Large
+
+```json
+{
+  "error": "payload_too_large",
+  "message": "Request body exceeds 100 KB limit"
+}
+```
+
+**Cause:** Request body exceeds 100 KB (102,400 bytes).
+
+### 429 Too Many Requests
+
+```json
+{
+  "error": "rate_limited",
+  "message": "Rate limit exceeded. Try again in 42 seconds."
+}
+```
+
+**Cause:** IP address exceeded 60 requests/minute.
+
+**Headers:**
+
+```http
+X-RateLimit-Limit: 60
+X-RateLimit-Remaining: 0
+X-RateLimit-Reset: 1709481234
+```
+
+## event_data Structure
+
+The `event_data` field accepts any valid JSON object. Common patterns:
+
+### E-commerce Events
+
+```json
+{
+  "event_name": "purchase",
+  "event_data": {
+    "order_id": "ORD-12345",
+    "amount": 149.99,
+    "currency": "USD",
+    "items": 3,
+    "category": "electronics"
+  }
+}
+```
+
+### Form Interactions
+
+```json
+{
+  "event_name": "form_submit",
+  "event_data": {
+    "form_id": "contact-form",
+    "fields_filled": 5,
+    "validation_errors": 0,
+    "time_to_submit_seconds": 42
+  }
+}
+```
+
+### Feature Usage
+
+```json
+{
+  "event_name": "feature_used",
+  "event_data": {
+    "feature_name": "export_csv",
+    "plan": "pro",
+    "rows_exported": 1523,
+    "format": "csv"
+  }
+}
+```
+
+### Search Queries
+
+```json
+{
+  "event_name": "search",
+  "event_data": {
+    "query": "analytics dashboard",
+    "results_count": 12,
+    "time_to_first_click_ms": 3400
+  }
+}
+```
+
+## Notes
+
+- Events are processed asynchronously — the `202 Accepted` response only confirms the event was queued, not that it was persisted
+- The ingestion queue has bounded capacity (default 10,000 events). If the queue is full, the server may reject requests with `503 Service Unavailable`
+- In cloud mode, billing limits are enforced before ingestion — requests may be rejected with `402 Payment Required` if the tenant's plan limit is exceeded
+- The `tenant_id` field is always `NULL` in self-hosted mode and is automatically set to the Clerk organization ID in cloud mode
+- Client IP is extracted from the socket address or `X-Forwarded-For` header (when behind a trusted proxy configured via `SPARKLYTICS_TRUSTED_PROXIES` environment variable)

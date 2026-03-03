@@ -1,0 +1,202 @@
+---
+title: 'Get Website Stats'
+api: 'GET /api/websites/:id/stats'
+description: 'Retrieve summary statistics for a website including pageviews, visitors, sessions, bounce rate, and average session duration.'
+---
+
+## Path Parameters
+
+<ParamField path="id" type="string" required>
+  Website ID
+</ParamField>
+
+## Query Parameters
+
+<ParamField query="start_date" type="string">
+  Start date in `YYYY-MM-DD` format. Defaults to 6 days ago if not provided.
+</ParamField>
+
+<ParamField query="end_date" type="string">
+  End date in `YYYY-MM-DD` format. Defaults to today if not provided.
+</ParamField>
+
+<ParamField query="timezone" type="string">
+  IANA timezone string (e.g., `America/New_York`). Defaults to UTC.
+</ParamField>
+
+<ParamField query="include_bots" type="boolean">
+  Whether to include bot traffic in results. Defaults to website's bot policy setting.
+</ParamField>
+
+### Comparison Parameters
+
+<ParamField query="compare_mode" type="string">
+  Comparison mode: `none`, `previous_period`, `previous_year`, or `custom`.
+</ParamField>
+
+<ParamField query="compare_start_date" type="string">
+  Custom comparison start date (required when `compare_mode=custom`).
+</ParamField>
+
+<ParamField query="compare_end_date" type="string">
+  Custom comparison end date (required when `compare_mode=custom`).
+</ParamField>
+
+### Filter Parameters
+
+<ParamField query="filter_country" type="string">
+  ISO 3166-1 alpha-2 country code (e.g., `US`, `GB`). Must be exactly 2 uppercase characters.
+</ParamField>
+
+<ParamField query="filter_page" type="string">
+  Filter by page URL path.
+</ParamField>
+
+<ParamField query="filter_referrer" type="string">
+  Filter by referrer domain.
+</ParamField>
+
+<ParamField query="filter_browser" type="string">
+  Filter by browser name.
+</ParamField>
+
+<ParamField query="filter_os" type="string">
+  Filter by operating system.
+</ParamField>
+
+<ParamField query="filter_device" type="string">
+  Filter by device type (e.g., `desktop`, `mobile`, `tablet`).
+</ParamField>
+
+<ParamField query="filter_language" type="string">
+  Filter by browser language.
+</ParamField>
+
+<ParamField query="filter_utm_source" type="string">
+  Filter by UTM source parameter.
+</ParamField>
+
+<ParamField query="filter_utm_medium" type="string">
+  Filter by UTM medium parameter.
+</ParamField>
+
+<ParamField query="filter_utm_campaign" type="string">
+  Filter by UTM campaign parameter.
+</ParamField>
+
+<ParamField query="filter_region" type="string">
+  Filter by geographic region/state.
+</ParamField>
+
+<ParamField query="filter_city" type="string">
+  Filter by city name.
+</ParamField>
+
+<ParamField query="filter_hostname" type="string">
+  Filter by hostname.
+</ParamField>
+
+## Response
+
+<ResponseField name="data" type="object">
+  Summary statistics for the requested period.
+
+  <ResponseField name="pageviews" type="integer">
+    Total number of pageviews in the current period.
+  </ResponseField>
+
+  <ResponseField name="visitors" type="integer">
+    Total unique visitors in the current period.
+  </ResponseField>
+
+  <ResponseField name="sessions" type="integer">
+    Total number of sessions in the current period.
+  </ResponseField>
+
+  <ResponseField name="bounce_rate" type="number">
+    Percentage of single-page sessions (0-100).
+  </ResponseField>
+
+  <ResponseField name="avg_duration_seconds" type="number">
+    Average session duration in seconds.
+  </ResponseField>
+
+  <ResponseField name="prev_pageviews" type="integer">
+    Previous period pageviews (for trend calculation).
+  </ResponseField>
+
+  <ResponseField name="prev_visitors" type="integer">
+    Previous period unique visitors.
+  </ResponseField>
+
+  <ResponseField name="prev_sessions" type="integer">
+    Previous period sessions.
+  </ResponseField>
+
+  <ResponseField name="prev_bounce_rate" type="number">
+    Previous period bounce rate.
+  </ResponseField>
+
+  <ResponseField name="prev_avg_duration_seconds" type="number">
+    Previous period average session duration.
+  </ResponseField>
+
+  <ResponseField name="timezone" type="string">
+    Timezone used for date calculations.
+  </ResponseField>
+</ResponseField>
+
+<ResponseField name="compare" type="object">
+  Comparison metadata (only present when `compare_mode` is set).
+
+  <ResponseField name="mode" type="string">
+    The comparison mode used.
+  </ResponseField>
+
+  <ResponseField name="primary_range" type="array">
+    Two-element array with start and end dates of the primary period.
+  </ResponseField>
+
+  <ResponseField name="comparison_range" type="array">
+    Two-element array with start and end dates of the comparison period.
+  </ResponseField>
+</ResponseField>
+
+## Example Request
+
+```bash
+curl -X GET "https://analytics.example.com/api/websites/abc123/stats?start_date=2024-03-01&end_date=2024-03-07&compare_mode=previous_period" \
+  -H "Authorization: Bearer spk_live_your_api_key"
+```
+
+## Example Response
+
+```json
+{
+  "data": {
+    "pageviews": 12543,
+    "visitors": 3891,
+    "sessions": 4872,
+    "bounce_rate": 42.3,
+    "avg_duration_seconds": 127.5,
+    "prev_pageviews": 10234,
+    "prev_visitors": 3201,
+    "prev_sessions": 4012,
+    "prev_bounce_rate": 45.1,
+    "prev_avg_duration_seconds": 112.8,
+    "timezone": "UTC"
+  },
+  "compare": {
+    "mode": "previous_period",
+    "primary_range": ["2024-03-01", "2024-03-07"],
+    "comparison_range": ["2024-02-23", "2024-02-29"]
+  }
+}
+```
+
+## Notes
+
+- The `prev_*` fields represent the previous period for trend calculations (typically the period immediately before the requested date range)
+- When `compare_mode` is set, the comparison period is returned in the `compare` object
+- Bounce rate is calculated as the percentage of sessions with only one pageview
+- Session duration is 0 for single-event sessions

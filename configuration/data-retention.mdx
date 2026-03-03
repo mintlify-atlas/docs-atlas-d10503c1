@@ -1,0 +1,336 @@
+---
+title: Data Retention
+description: Configure how long Sparklytics keeps raw event data
+---
+
+Sparklytics automatically deletes old raw events based on a configurable retention policy. This keeps your database size manageable while preserving aggregate statistics.
+
+## Overview
+
+Data retention in Sparklytics works as follows:
+
+1. **Raw events** (`events` table) are kept for a configurable number of days
+2. Events older than the retention period are automatically deleted
+3. **Aggregate data is never deleted** (daily/monthly rollups, if implemented)
+4. Cleanup runs automatically in the background
+
+<Note>
+  Default retention is **365 days** (1 year). Adjust based on your storage capacity and compliance requirements.
+</Note>
+
+## Configuration
+
+<ParamField path="SPARKLYTICS_RETENTION_DAYS" type="number" default="365">
+  Number of days to keep raw event data.
+  
+  Events with `created_at` older than this threshold are automatically deleted.
+  
+  ```bash
+  # Keep data for 6 months
+  SPARKLYTICS_RETENTION_DAYS=180
+  
+  # Keep data for 2 years
+  SPARKLYTICS_RETENTION_DAYS=730
+  
+  # Keep data for 30 days (minimal storage)
+  SPARKLYTICS_RETENTION_DAYS=30
+  ```
+</ParamField>
+
+## How Retention Works
+
+### Automatic Cleanup
+
+Sparklytics runs a background task that periodically deletes events older than `SPARKLYTICS_RETENTION_DAYS`.
+
+- **Frequency:** Currently runs on-demand (manual trigger or on startup)
+- **Query:** `DELETE FROM events WHERE created_at < NOW() - INTERVAL 'X days'`
+- **Performance:** Runs in a transaction; may take several seconds for large datasets
+
+<Warning>
+  Deleted events **cannot be recovered**. Ensure your retention period meets your compliance and analytics needs before reducing it.
+</Warning>
+
+### What Gets Deleted
+
+Only raw event records are deleted:
+
+| Table | Retention Policy |
+|-------|------------------|
+| `events` | Deleted after `RETENTION_DAYS` |
+| `sessions` | Deleted when all associated events are deleted |
+| `websites` | Never deleted (metadata) |
+| `api_keys` | Never deleted (configuration) |
+| `goals` | Never deleted (configuration) |
+
+<Note>
+  Future versions will include pre-aggregated daily/monthly summaries that are kept indefinitely, independent of raw event retention.
+</Note>
+
+## Storage Estimates
+
+Raw event storage grows linearly with traffic. Here are approximate sizes per 1 million events:
+
+| Backend | Storage per 1M Events |
+|---------|-----------------------|
+| DuckDB (self-hosted) | ~278 MB |
+| ClickHouse (cloud) | ~48 MB |
+
+### Example Calculations
+
+**Small site:** 100k pageviews/month
+- 1 year retention: `100k * 12 * 278 MB / 1M = ~334 MB`
+
+**Medium site:** 1M pageviews/month
+- 6 months retention: `1M * 6 * 278 MB / 1M = ~1.7 GB`
+
+**Large site:** 10M pageviews/month
+- 3 months retention: `10M * 3 * 278 MB / 1M = ~8.3 GB`
+
+<Note>
+  These are DuckDB estimates. ClickHouse (cloud) is ~5.8x more storage-efficient.
+</Note>
+
+## Recommended Retention Periods
+
+| Use Case | Recommended Retention | Reasoning |
+|----------|----------------------|-----------|
+| Personal blog | 180-365 days | Low traffic, storage not a concern |
+| SaaS product | 90-180 days | Balance between insights and cost |
+| High-traffic media | 30-90 days | Large volume, focus on recent trends |
+| Compliance (GDPR) | 30-90 days | Minimize PII retention |
+| Long-term analysis | 730+ days | Historical comparisons, trends |
+
+<Warning>
+  **GDPR Compliance:** EU GDPR requires that personal data (including visitor analytics) is kept only as long as necessary. Many organizations use 90 days or less for analytics data.
+</Warning>
+
+## Manual Cleanup
+
+To manually delete old events (e.g., to free up space immediately):
+
+### Docker
+
+```bash
+# Connect to DuckDB inside the container
+docker exec -it sparklytics duckdb /data/sparklytics.db
+
+# Delete events older than 90 days
+DELETE FROM events WHERE created_at < NOW() - INTERVAL '90 days';
+
+# Exit DuckDB
+.quit
+```
+
+### Bare-Metal
+
+```bash
+# Open the DuckDB CLI
+duckdb /var/lib/sparklytics/data/sparklytics.db
+
+# Delete events older than 90 days
+DELETE FROM events WHERE created_at < NOW() - INTERVAL '90 days';
+
+# Exit
+.quit
+```
+
+<Note>
+  You don't need to stop Sparklytics to run manual cleanup, but be aware that DuckDB uses a single-writer model. The DELETE may block briefly if the background buffer is flushing events.
+</Note>
+
+## Changing Retention Policy
+
+You can change `SPARKLYTICS_RETENTION_DAYS` at any time:
+
+<Steps>
+  <Step title="Update environment variable">
+    ```bash
+    # docker-compose.yml
+    environment:
+      SPARKLYTICS_RETENTION_DAYS: 180
+    ```
+    
+    Or in `.env`:
+    
+    ```bash
+    SPARKLYTICS_RETENTION_DAYS=180
+    ```
+  </Step>
+  
+  <Step title="Restart Sparklytics">
+    ```bash
+    docker-compose restart
+    # Or for Docker run:
+    docker restart sparklytics
+    ```
+  </Step>
+  
+  <Step title="(Optional) Trigger immediate cleanup">
+    If you reduced the retention period and want to free space immediately, run manual cleanup (see above).
+    
+    Otherwise, the background task will clean up on its next run.
+  </Step>
+</Steps>
+
+<Warning>
+  **Reducing retention** deletes historical data. **Increasing retention** does not recover already-deleted events.
+</Warning>
+
+## Monitoring Retention
+
+### Check Oldest Event
+
+```sql
+-- DuckDB CLI
+SELECT MIN(created_at) AS oldest_event FROM events;
+```
+
+This shows how far back your data goes. Compare this to `NOW() - INTERVAL 'RETENTION_DAYS days'` to verify cleanup is working.
+
+### Check Database Size
+
+```bash
+# Docker
+docker exec sparklytics du -sh /data/sparklytics.db
+
+# Bare-metal
+du -sh /var/lib/sparklytics/data/sparklytics.db
+```
+
+### Check Event Count by Age
+
+```sql
+-- Events in the last 30 days
+SELECT COUNT(*) FROM events WHERE created_at >= NOW() - INTERVAL '30 days';
+
+-- Events older than retention period (should be 0 after cleanup)
+SELECT COUNT(*) FROM events WHERE created_at < NOW() - INTERVAL '365 days';
+```
+
+## Backup Before Cleanup
+
+If you're unsure about your retention policy, back up your database before letting cleanup run:
+
+```bash
+# Docker
+docker exec sparklytics duckdb /data/sparklytics.db ".backup /data/backup.db"
+docker cp sparklytics:/data/backup.db ./sparklytics-backup.db
+
+# Bare-metal
+cp /var/lib/sparklytics/data/sparklytics.db /var/backups/sparklytics-$(date +%Y%m%d).db
+```
+
+<Note>
+  DuckDB backups are consistent snapshots — the database remains online during backup.
+</Note>
+
+## Retention vs. Aggregates (Future)
+
+Future versions of Sparklytics will include pre-aggregated rollups:
+
+- **Daily aggregates:** Pageviews, visitors, bounce rate per day
+- **Monthly aggregates:** Same metrics, rolled up by month
+- **Permanent retention:** Aggregates are kept indefinitely, even after raw events are deleted
+
+This allows you to:
+
+- Keep raw events for 30-90 days (storage-efficient)
+- View historical trends for years (from aggregates)
+
+<Note>
+  Aggregates are planned for v1.2. Currently, deleting events removes all associated data.
+</Note>
+
+## Compliance Considerations
+
+### GDPR (EU)
+
+- **Data minimization:** Only keep data as long as necessary for analytics
+- **Typical retention:** 30-90 days for web analytics
+- **User rights:** If a user requests data deletion, you may need to purge events containing their `visitor_id`
+
+### CCPA (California)
+
+- **Consumer rights:** Users can request deletion of their personal information
+- **Anonymous visitor IDs:** Sparklytics visitor IDs are hashed and salted, making them hard to tie to individuals, but may still be considered personal data
+
+<Note>
+  Sparklytics does not store IP addresses, emails, or other direct identifiers. However, `visitor_id` is derived from IP + User-Agent and may be considered PII under strict interpretations.
+</Note>
+
+### Manual Data Deletion (GDPR/CCPA Requests)
+
+To delete all data for a specific `visitor_id`:
+
+```sql
+DELETE FROM events WHERE visitor_id = 'abc123def456';
+```
+
+To find a visitor's ID from an IP (must be done within the same day due to salt rotation):
+
+1. Look up the visitor ID in recent events matching the IP's approximate geolocation
+2. Or, regenerate the visitor ID hash using the same salt + IP + User-Agent
+
+<Warning>
+  This is intentionally difficult by design. Sparklytics is built for privacy-first analytics. If you need per-user deletion workflows, consider cloud mode with user accounts.
+</Warning>
+
+## Troubleshooting
+
+### Retention Cleanup Not Running
+
+**Symptom:** Events older than `RETENTION_DAYS` are still in the database.
+
+**Diagnosis:**
+
+1. Check retention setting:
+   ```bash
+   docker exec sparklytics printenv | grep RETENTION
+   ```
+
+2. Check oldest event:
+   ```sql
+   SELECT MIN(created_at) FROM events;
+   ```
+
+3. Check if cleanup task is enabled (look for logs mentioning retention)
+
+**Solution:** Run manual cleanup (see above) or wait for the next scheduled run.
+
+### Database Size Not Decreasing After Deletion
+
+**Symptom:** `DELETE FROM events WHERE ...` completes, but file size stays the same.
+
+**Cause:** DuckDB does not automatically reclaim disk space after deletions (like SQLite, it leaves "holes" in the file).
+
+**Solution:** Vacuum the database:
+
+```bash
+# DuckDB CLI
+duckdb /data/sparklytics.db
+VACUUM;
+.quit
+```
+
+Or, export and re-import:
+
+```sql
+EXPORT DATABASE '/tmp/export';
+.quit
+
+# Restart with fresh DB
+mv sparklytics.db sparklytics-old.db
+duckdb sparklytics.db
+IMPORT DATABASE '/tmp/export';
+.quit
+```
+
+<Warning>
+  `VACUUM` may take several minutes on large databases. Sparklytics should be stopped during VACUUM.
+</Warning>
+
+## See Also
+
+- [Environment Variables](/configuration/environment-variables) — Full configuration reference
+- [Performance Tuning](/self-hosting/performance-tuning) — Optimization and backup strategies

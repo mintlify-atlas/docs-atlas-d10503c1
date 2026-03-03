@@ -1,0 +1,338 @@
+---
+title: 'Get Metrics Breakdown'
+api: 'GET /api/websites/:id/metrics'
+description: 'Retrieve a breakdown of analytics data by dimension (pages, referrers, countries, browsers, etc.) with ranking and comparison support.'
+---
+
+## Path Parameters
+
+<ParamField path="id" type="string" required>
+  Website ID
+</ParamField>
+
+## Query Parameters
+
+<ParamField query="type" type="string" required>
+  The metric dimension to break down. Valid values:
+  - `page` - Top pages by traffic
+  - `referrer` - Top referrer domains
+  - `country` - Traffic by country
+  - `region` - Traffic by region/state
+  - `city` - Traffic by city
+  - `browser` - Browser breakdown
+  - `os` - Operating system breakdown
+  - `device` - Device type breakdown
+  - `language` - Browser language breakdown
+  - `utm_source` - UTM source parameter
+  - `utm_medium` - UTM medium parameter
+  - `utm_campaign` - UTM campaign parameter
+  - `hostname` - Hostname breakdown
+</ParamField>
+
+<ParamField query="limit" type="integer" default="10">
+  Number of results to return (1-100).
+</ParamField>
+
+<ParamField query="offset" type="integer" default="0">
+  Number of results to skip for pagination.
+</ParamField>
+
+<ParamField query="start_date" type="string">
+  Start date in `YYYY-MM-DD` format. Defaults to 6 days ago if not provided.
+</ParamField>
+
+<ParamField query="end_date" type="string">
+  End date in `YYYY-MM-DD` format. Defaults to today if not provided.
+</ParamField>
+
+<ParamField query="timezone" type="string">
+  IANA timezone string (e.g., `America/New_York`). Defaults to UTC.
+</ParamField>
+
+<ParamField query="include_bots" type="boolean">
+  Whether to include bot traffic in results. Defaults to website's bot policy setting.
+</ParamField>
+
+### Comparison Parameters
+
+<ParamField query="compare_mode" type="string">
+  Comparison mode: `none`, `previous_period`, `previous_year`, or `custom`.
+</ParamField>
+
+<ParamField query="compare_start_date" type="string">
+  Custom comparison start date (required when `compare_mode=custom`).
+</ParamField>
+
+<ParamField query="compare_end_date" type="string">
+  Custom comparison end date (required when `compare_mode=custom`).
+</ParamField>
+
+### Filter Parameters
+
+<ParamField query="filter_country" type="string">
+  ISO 3166-1 alpha-2 country code.
+</ParamField>
+
+<ParamField query="filter_page" type="string">
+  Filter by page URL path.
+</ParamField>
+
+<ParamField query="filter_referrer" type="string">
+  Filter by referrer domain.
+</ParamField>
+
+<ParamField query="filter_browser" type="string">
+  Filter by browser name.
+</ParamField>
+
+<ParamField query="filter_os" type="string">
+  Filter by operating system.
+</ParamField>
+
+<ParamField query="filter_device" type="string">
+  Filter by device type.
+</ParamField>
+
+<ParamField query="filter_language" type="string">
+  Filter by browser language.
+</ParamField>
+
+<ParamField query="filter_utm_source" type="string">
+  Filter by UTM source parameter.
+</ParamField>
+
+<ParamField query="filter_utm_medium" type="string">
+  Filter by UTM medium parameter.
+</ParamField>
+
+<ParamField query="filter_utm_campaign" type="string">
+  Filter by UTM campaign parameter.
+</ParamField>
+
+<ParamField query="filter_region" type="string">
+  Filter by geographic region/state.
+</ParamField>
+
+<ParamField query="filter_city" type="string">
+  Filter by city name.
+</ParamField>
+
+<ParamField query="filter_hostname" type="string">
+  Filter by hostname.
+</ParamField>
+
+## Response
+
+<ResponseField name="data" type="object">
+  Metrics breakdown data.
+
+  <ResponseField name="type" type="string">
+    The metric type that was requested.
+  </ResponseField>
+
+  <ResponseField name="rows" type="array">
+    Array of metric rows, sorted by visitors descending.
+
+    <ResponseField name="value" type="string">
+      The dimension value (e.g., page URL, country code, browser name).
+    </ResponseField>
+
+    <ResponseField name="visitors" type="integer">
+      Number of unique visitors for this value.
+    </ResponseField>
+
+    <ResponseField name="pageviews" type="integer">
+      Number of pageviews for this value.
+    </ResponseField>
+
+    <ResponseField name="bounce_rate" type="number">
+      Bounce rate percentage (0-100) for sessions involving this dimension value.
+    </ResponseField>
+
+    <ResponseField name="avg_duration_seconds" type="number">
+      Average session duration in seconds for sessions involving this value.
+    </ResponseField>
+
+    <ResponseField name="prev_visitors" type="integer">
+      Previous period visitors (only present when `compare_mode` is set).
+    </ResponseField>
+
+    <ResponseField name="prev_pageviews" type="integer">
+      Previous period pageviews (only present when `compare_mode` is set).
+    </ResponseField>
+
+    <ResponseField name="delta_visitors_abs" type="integer">
+      Absolute change in visitors (only present when `compare_mode` is set).
+    </ResponseField>
+
+    <ResponseField name="delta_visitors_pct" type="number">
+      Percentage change in visitors (only present when `compare_mode` is set).
+    </ResponseField>
+  </ResponseField>
+</ResponseField>
+
+<ResponseField name="pagination" type="object">
+  Pagination metadata.
+
+  <ResponseField name="total" type="integer">
+    Total number of unique dimension values.
+  </ResponseField>
+
+  <ResponseField name="limit" type="integer">
+    The limit used for this request.
+  </ResponseField>
+
+  <ResponseField name="offset" type="integer">
+    The offset used for this request.
+  </ResponseField>
+
+  <ResponseField name="has_more" type="boolean">
+    Whether there are more results available.
+  </ResponseField>
+</ResponseField>
+
+<ResponseField name="compare" type="object">
+  Comparison metadata (only present when `compare_mode` is set).
+
+  <ResponseField name="mode" type="string">
+    The comparison mode used.
+  </ResponseField>
+
+  <ResponseField name="primary_range" type="array">
+    Two-element array with start and end dates of the primary period.
+  </ResponseField>
+
+  <ResponseField name="comparison_range" type="array">
+    Two-element array with start and end dates of the comparison period.
+  </ResponseField>
+</ResponseField>
+
+## Example Request
+
+```bash
+curl -X GET "https://analytics.example.com/api/websites/abc123/metrics?type=page&limit=10&start_date=2024-03-01&end_date=2024-03-07" \
+  -H "Authorization: Bearer spk_live_your_api_key"
+```
+
+## Example Response
+
+```json
+{
+  "data": {
+    "type": "page",
+    "rows": [
+      {
+        "value": "/",
+        "visitors": 2341,
+        "pageviews": 3892,
+        "bounce_rate": 38.2,
+        "avg_duration_seconds": 145.3
+      },
+      {
+        "value": "/pricing",
+        "visitors": 1823,
+        "pageviews": 2104,
+        "bounce_rate": 42.1,
+        "avg_duration_seconds": 98.7
+      },
+      {
+        "value": "/features",
+        "visitors": 1542,
+        "pageviews": 1876,
+        "bounce_rate": 35.6,
+        "avg_duration_seconds": 132.4
+      },
+      {
+        "value": "/docs",
+        "visitors": 1203,
+        "pageviews": 4521,
+        "bounce_rate": 28.9,
+        "avg_duration_seconds": 287.1
+      },
+      {
+        "value": "/blog/getting-started",
+        "visitors": 891,
+        "pageviews": 1012,
+        "bounce_rate": 51.3,
+        "avg_duration_seconds": 76.5
+      }
+    ]
+  },
+  "pagination": {
+    "total": 124,
+    "limit": 10,
+    "offset": 0,
+    "has_more": true
+  },
+  "compare": null
+}
+```
+
+## Example with Comparison
+
+```bash
+curl -X GET "https://analytics.example.com/api/websites/abc123/metrics?type=country&limit=5&start_date=2024-03-01&end_date=2024-03-07&compare_mode=previous_period" \
+  -H "Authorization: Bearer spk_live_your_api_key"
+```
+
+```json
+{
+  "data": {
+    "type": "country",
+    "rows": [
+      {
+        "value": "US",
+        "visitors": 1823,
+        "pageviews": 4521,
+        "bounce_rate": 41.2,
+        "avg_duration_seconds": 125.3,
+        "prev_visitors": 1542,
+        "prev_pageviews": 3891,
+        "delta_visitors_abs": 281,
+        "delta_visitors_pct": 18.2
+      },
+      {
+        "value": "GB",
+        "visitors": 891,
+        "pageviews": 2103,
+        "bounce_rate": 38.7,
+        "avg_duration_seconds": 142.1,
+        "prev_visitors": 923,
+        "prev_pageviews": 2234,
+        "delta_visitors_abs": -32,
+        "delta_visitors_pct": -3.5
+      },
+      {
+        "value": "DE",
+        "visitors": 723,
+        "pageviews": 1654,
+        "bounce_rate": 43.1,
+        "avg_duration_seconds": 108.9,
+        "prev_visitors": 651,
+        "prev_pageviews": 1502,
+        "delta_visitors_abs": 72,
+        "delta_visitors_pct": 11.1
+      }
+    ]
+  },
+  "pagination": {
+    "total": 47,
+    "limit": 5,
+    "offset": 0,
+    "has_more": true
+  },
+  "compare": {
+    "mode": "previous_period",
+    "primary_range": ["2024-03-01", "2024-03-07"],
+    "comparison_range": ["2024-02-23", "2024-02-29"]
+  }
+}
+```
+
+## Notes
+
+- Valid metric types are defined in `VALID_METRIC_TYPES` constant in the backend
+- Results are always sorted by visitors in descending order
+- The `limit` parameter is clamped to 1-100
+- Use `offset` for pagination to retrieve additional results
+- Comparison fields (`prev_*`, `delta_*`) are only included when `compare_mode` is set

@@ -1,0 +1,439 @@
+---
+title: Conversion Funnels
+description: Build and analyze multi-step conversion funnels to optimize user flows and increase conversions.
+---
+
+## Overview
+
+Conversion funnels help you understand where users drop off in multi-step processes like signups, checkouts, or onboarding flows. Sparklytics supports:
+
+- **2-8 steps** per funnel
+- **Page and event matching** for step definitions
+- **Up to 20 funnels** per website
+- **Real-time results** with timezone support
+
+<Frame>
+  <img src="/images/funnel-visualization.png" alt="Funnel visualization showing conversion rates" />
+</Frame>
+
+## Creating Funnels
+
+### Via Dashboard
+
+1. Navigate to **Funnels** in the sidebar
+2. Click **Create Funnel**
+3. Name your funnel (e.g., "Signup Flow")
+4. Define 2-8 steps with match conditions
+5. Click **Save**
+
+### Via API
+
+```bash
+POST /api/websites/{website_id}/funnels
+Content-Type: application/json
+Authorization: Bearer {api_key}
+```
+
+```json
+{
+  "name": "Signup Flow",
+  "steps": [
+    {
+      "match_type": "page",
+      "match_value": "/pricing",
+      "label": "View Pricing"
+    },
+    {
+      "match_type": "page",
+      "match_value": "/signup",
+      "label": "Start Signup"
+    },
+    {
+      "match_type": "event",
+      "match_value": "signup_complete",
+      "label": "Complete Signup"
+    }
+  ]
+}
+```
+
+Response (HTTP 201):
+
+```json
+{
+  "data": {
+    "id": "fnl_abc123",
+    "name": "Signup Flow",
+    "steps": [
+      {
+        "step_number": 1,
+        "match_type": "page",
+        "match_value": "/pricing",
+        "label": "View Pricing"
+      },
+      {
+        "step_number": 2,
+        "match_type": "page",
+        "match_value": "/signup",
+        "label": "Start Signup"
+      },
+      {
+        "step_number": 3,
+        "match_type": "event",
+        "match_value": "signup_complete",
+        "label": "Complete Signup"
+      }
+    ],
+    "created_at": "2026-03-03T10:00:00Z",
+    "updated_at": "2026-03-03T10:00:00Z"
+  }
+}
+```
+
+## Step Definitions
+
+### Match Types
+
+<ResponseField name="page" type="string">
+  Match pageviews by URL path (e.g., `/pricing`, `/checkout`)
+</ResponseField>
+
+<ResponseField name="event" type="string">
+  Match custom events by name (e.g., `signup_click`, `purchase`)
+</ResponseField>
+
+### Match Value Rules
+
+- **Maximum 500 characters**
+- **Must not be empty**
+- **Case-sensitive** exact matching
+- **No wildcards** (use Journey Analysis for pattern matching)
+
+### Optional Labels
+
+Labels make funnel steps easier to read in reports:
+
+- Maximum 120 characters
+- Displayed in the UI instead of raw match values
+- Defaults to match value if not provided
+
+## Analyzing Funnel Results
+
+### Query Funnel Performance
+
+```bash
+GET /api/websites/{website_id}/funnels/{funnel_id}/results?
+  start_date=2026-02-01&
+  end_date=2026-03-01&
+  timezone=America/New_York
+```
+
+Response:
+
+```json
+{
+  "data": {
+    "funnel_id": "fnl_abc123",
+    "steps": [
+      {
+        "step_number": 1,
+        "label": "View Pricing",
+        "visitors": 1250,
+        "conversion_rate": 100.0,
+        "drop_off_rate": 0.0
+      },
+      {
+        "step_number": 2,
+        "label": "Start Signup",
+        "visitors": 487,
+        "conversion_rate": 38.96,
+        "drop_off_rate": 61.04
+      },
+      {
+        "step_number": 3,
+        "label": "Complete Signup",
+        "visitors": 312,
+        "conversion_rate": 24.96,
+        "drop_off_rate": 75.04
+      }
+    ],
+    "total_entered": 1250,
+    "total_completed": 312,
+    "overall_conversion_rate": 24.96
+  }
+}
+```
+
+### Metrics Explained
+
+<ResponseField name="visitors" type="number">
+  Number of unique visitors who reached this step
+</ResponseField>
+
+<ResponseField name="conversion_rate" type="number">
+  Percentage of visitors from Step 1 who reached this step
+</ResponseField>
+
+<ResponseField name="drop_off_rate" type="number">
+  Percentage of visitors from Step 1 who did NOT reach this step
+</ResponseField>
+
+## Filtering Results
+
+Apply the same filters available on the main dashboard:
+
+```bash
+GET /api/websites/{website_id}/funnels/{funnel_id}/results?
+  start_date=2026-02-01&
+  end_date=2026-03-01&
+  filter_country=US&
+  filter_device=mobile&
+  filter_utm_source=google
+```
+
+### Available Filters
+
+- `filter_country` — ISO 3166-1 alpha-2 country code
+- `filter_region` — Region/state name
+- `filter_city` — City name
+- `filter_browser` — Browser name (e.g., "Chrome")
+- `filter_os` — Operating system (e.g., "macOS")
+- `filter_device` — Device type (desktop/mobile/tablet)
+- `filter_page` — Filter by entry page
+- `filter_referrer` — Filter by referrer domain
+- `filter_utm_source` — UTM source parameter
+- `filter_utm_medium` — UTM medium parameter
+- `filter_utm_campaign` — UTM campaign parameter
+
+## Managing Funnels
+
+### List All Funnels
+
+```bash
+GET /api/websites/{website_id}/funnels
+```
+
+### Get Single Funnel
+
+```bash
+GET /api/websites/{website_id}/funnels/{funnel_id}
+```
+
+### Update Funnel
+
+```bash
+PUT /api/websites/{website_id}/funnels/{funnel_id}
+Content-Type: application/json
+```
+
+```json
+{
+  "name": "Updated Signup Flow",
+  "steps": [
+    // New step definitions
+  ]
+}
+```
+
+### Delete Funnel
+
+```bash
+DELETE /api/websites/{website_id}/funnels/{funnel_id}
+```
+
+Returns HTTP 204 on success.
+
+## Validation Rules
+
+From `crates/sparklytics-server/src/routes/funnels.rs:144`:
+
+```rust
+fn validate_steps(steps: &[CreateFunnelStepRequest]) -> Result<(), (StatusCode, Json<Value>)> {
+    if !(2..=8).contains(&steps.len()) {
+        return Err(unprocessable(
+            "validation_error",
+            "funnels must have between 2 and 8 steps",
+            Some("steps"),
+        ));
+    }
+
+    for step in steps {
+        if step.match_value.trim().is_empty() {
+            return Err(unprocessable(
+                "validation_error",
+                "match_value must not be empty",
+                Some("match_value"),
+            ));
+        }
+        if step.match_value.len() > 500 {
+            return Err(unprocessable(
+                "validation_error",
+                "match_value must be 500 characters or fewer",
+                Some("match_value"),
+            ));
+        }
+        // Label validation...
+    }
+    Ok(())
+}
+```
+
+## Rate Limiting
+
+Funnel endpoints have tiered rate limits:
+
+<CodeGroup>
+
+```bash Read Operations
+# 60 requests/minute per client
+# 240 requests/minute per website
+GET /api/websites/{website_id}/funnels
+GET /api/websites/{website_id}/funnels/{funnel_id}
+```
+
+```bash Mutations
+# 30 requests/minute per client
+# 60 requests/minute per website
+POST /api/websites/{website_id}/funnels
+PUT /api/websites/{website_id}/funnels/{funnel_id}
+DELETE /api/websites/{website_id}/funnels/{funnel_id}
+```
+
+```bash Results
+# 10 requests/minute per client
+# 20 requests/minute per website
+GET /api/websites/{website_id}/funnels/{funnel_id}/results
+```
+
+</CodeGroup>
+
+From `crates/sparklytics-server/src/routes/funnels.rs:33`:
+
+```rust
+const FUNNELS_READ_RATE_LIMIT: usize = 60;
+const FUNNELS_MUTATION_RATE_LIMIT: usize = 30;
+const FUNNELS_RESULTS_RATE_LIMIT: usize = 10;
+const FUNNELS_SCOPE_READ_RATE_LIMIT: usize = 240;
+const FUNNELS_SCOPE_MUTATION_RATE_LIMIT: usize = 60;
+const FUNNELS_SCOPE_RESULTS_RATE_LIMIT: usize = 20;
+```
+
+## Performance
+
+Funnel queries use a concurrency-limited semaphore to prevent resource exhaustion:
+
+```rust
+let _permit = tokio::time::timeout(
+    Duration::from_secs(1),
+    state.funnel_results_semaphore.acquire(),
+)
+.await
+.map_err(|_| AppError::RateLimited)?;
+```
+
+If all slots are occupied, requests return `429 Too Many Requests` with a 1-second timeout.
+
+## Best Practices
+
+### Start Simple
+
+Begin with 3-4 steps to identify the biggest drop-off points:
+
+```json
+{
+  "name": "Basic Checkout",
+  "steps": [
+    { "match_type": "page", "match_value": "/cart" },
+    { "match_type": "page", "match_value": "/checkout" },
+    { "match_type": "event", "match_value": "purchase" }
+  ]
+}
+```
+
+### Use Descriptive Labels
+
+Make reports easier to understand:
+
+```json
+{
+  "label": "View Product Page"
+}
+// Better than:
+{
+  "match_value": "/products/*"
+}
+```
+
+### Segment by Device
+
+Compare mobile vs desktop conversion rates:
+
+```bash
+# Mobile
+GET .../results?filter_device=mobile
+
+# Desktop
+GET .../results?filter_device=desktop
+```
+
+### Track Campaign Performance
+
+Filter by UTM parameters to compare campaign effectiveness:
+
+```bash
+GET .../results?filter_utm_campaign=spring_sale
+```
+
+## Common Use Cases
+
+### SaaS Signup Funnel
+
+```json
+{
+  "name": "Trial Signup",
+  "steps": [
+    { "match_type": "page", "match_value": "/pricing", "label": "View Pricing" },
+    { "match_type": "event", "match_value": "trial_start", "label": "Start Trial" },
+    { "match_type": "event", "match_value": "onboarding_complete", "label": "Complete Onboarding" },
+    { "match_type": "event", "match_value": "first_project", "label": "Create First Project" }
+  ]
+}
+```
+
+### E-commerce Checkout
+
+```json
+{
+  "name": "Purchase Flow",
+  "steps": [
+    { "match_type": "event", "match_value": "add_to_cart", "label": "Add to Cart" },
+    { "match_type": "page", "match_value": "/cart", "label": "View Cart" },
+    { "match_type": "page", "match_value": "/checkout", "label": "Start Checkout" },
+    { "match_type": "event", "match_value": "purchase", "label": "Complete Purchase" }
+  ]
+}
+```
+
+### Content Engagement
+
+```json
+{
+  "name": "Blog to Newsletter",
+  "steps": [
+    { "match_type": "page", "match_value": "/blog", "label": "Read Blog" },
+    { "match_type": "event", "match_value": "newsletter_form_view", "label": "View Form" },
+    { "match_type": "event", "match_value": "newsletter_subscribe", "label": "Subscribe" }
+  ]
+}
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Retention Analysis" icon="users" href="/features/retention">
+    Track long-term user retention with cohort analysis
+  </Card>
+  <Card title="Journey Analysis" icon="route" href="/features/journey-analysis">
+    Explore all paths users take through your site
+  </Card>
+</CardGroup>

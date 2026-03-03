@@ -1,0 +1,174 @@
+---
+title: Real-time Analytics
+description: Monitor live visitor activity and track user behavior as it happens with Sparklytics real-time dashboard.
+---
+
+## Overview
+
+Sparklytics provides real-time analytics that update every 10 seconds, giving you instant visibility into current visitor activity on your website. The real-time dashboard shows active visitors and recent pageviews without requiring cookies or client-side storage.
+
+## Active Visitors
+
+The real-time panel displays the current number of active visitors on your site. A visitor is considered active if they've triggered any event (pageview or custom event) within the last 30 minutes.
+
+<Frame>
+  <img src="/images/realtime-panel.png" alt="Real-time panel showing active visitors" />
+</Frame>
+
+### How It Works
+
+- **30-minute activity window**: Visitors are counted as active if they've had any activity in the last 30 minutes
+- **Server-side tracking**: No client-side polling required — activity is tracked server-side
+- **Privacy-first**: Uses privacy-preserving visitor IDs computed as `sha256(salt_epoch + ip + user_agent)[0:16]`
+- **Auto-refresh**: Dashboard polls the real-time endpoint every 10 seconds
+
+## Recent Events Stream
+
+The real-time panel shows the last 100 events from the past 30 minutes, ordered by most recent first.
+
+### Event Information
+
+Each recent event displays:
+
+- **URL**: The page path or event name
+- **Referrer domain**: Where the visitor came from (if available)
+- **Timestamp**: Relative time (e.g., "2m ago", "15s ago")
+
+```tsx
+// Example recent event structure
+{
+  "url": "/pricing",
+  "referrer_domain": "google.com",
+  "ts": "2026-03-03T10:45:23Z"
+}
+```
+
+## API Reference
+
+The real-time data is powered by the `/api/websites/:id/realtime` endpoint.
+
+### Endpoint
+
+```bash
+GET /api/websites/{website_id}/realtime
+```
+
+### Query Parameters
+
+<ParamField query="include_bots" type="boolean" default="false">
+  Include bot traffic in the results. Defaults to the website's bot policy setting.
+</ParamField>
+
+### Response
+
+```json
+{
+  "data": {
+    "active_visitors": 42,
+    "recent_events": [
+      {
+        "url": "/pricing",
+        "referrer_domain": "google.com",
+        "ts": "2026-03-03T10:45:23Z"
+      },
+      {
+        "url": "/features",
+        "referrer_domain": null,
+        "ts": "2026-03-03T10:44:58Z"
+      }
+    ]
+  }
+}
+```
+
+### Implementation
+
+From `crates/sparklytics-server/src/routes/realtime.rs:18`:
+
+```rust
+pub async fn get_realtime(
+    State(state): State<Arc<AppState>>,
+    Path(website_id): Path<String>,
+    Query(query): Query<RealtimeQuery>,
+) -> Result<impl IntoResponse, AppError> {
+    let include_bots = query
+        .include_bots
+        .unwrap_or(state.default_include_bots(&website_id).await);
+    let result = state
+        .analytics
+        .get_realtime(&website_id, None, include_bots)
+        .await
+        .map_err(AppError::Internal)?;
+
+    Ok(Json(json!({ "data": result })))
+}
+```
+
+## Dashboard Integration
+
+The real-time panel automatically updates in the background while you view your analytics dashboard.
+
+### Live Indicator
+
+The pulsing green dot indicates that the real-time data is being actively refreshed:
+
+```tsx
+<span className="relative flex w-2 h-2">
+  <span className="animate-[pulse-spark_2s_ease-in-out_infinite] 
+                 absolute inline-flex h-full w-full rounded-full 
+                 bg-spark opacity-75" />
+  <span className="relative inline-flex rounded-full w-2 h-2 bg-spark" />
+</span>
+```
+
+### Polling Strategy
+
+From `dashboard/components/dashboard/RealtimePanel.tsx:18`:
+
+- Fetches data every 10 seconds using React Query
+- Gracefully handles API errors
+- Shows skeleton loading states during initial fetch
+
+## Use Cases
+
+### Monitor Campaign Launch
+
+Watch visitor activity in real-time as you launch a marketing campaign or product announcement.
+
+### Track Event Impact
+
+See immediate traffic spikes from social media posts, email campaigns, or PR coverage.
+
+### Debug Tracking Issues
+
+Verify that events are being tracked correctly by watching the recent events stream as you navigate your site.
+
+### Support Live Events
+
+Monitor concurrent users during webinars, product launches, or flash sales.
+
+## Performance
+
+The realtime endpoint is optimized for fast queries:
+
+- **DuckDB**: Queries complete in < 10ms for sites with millions of events
+- **ClickHouse (Cloud)**: Queries complete in < 5ms with horizontal scaling
+- **No polling overhead**: Server handles all computation; clients simply fetch results
+
+## Privacy & Compliance
+
+- **No cookies**: Real-time tracking works without storing any client-side state
+- **IP anonymization**: Visitor IDs are one-way hashes that rotate daily at midnight UTC
+- **GDPR-friendly**: No PII is stored or transmitted
+- **DNT/GPC respected**: Honors Do Not Track and Global Privacy Control signals by default
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Custom Events" icon="chart-line" href="/features/custom-events">
+    Track custom events in the real-time stream
+  </Card>
+  <Card title="Sessions" icon="clock" href="/features/sessions">
+    View detailed session timelines
+  </Card>
+</CardGroup>

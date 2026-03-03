@@ -1,0 +1,271 @@
+---
+title: 'Get User Journey'
+api: 'GET /api/websites/:id/journey'
+description: 'Retrieve user journey paths showing which pages or events visitors navigate to before or after a specific anchor point.'
+---
+
+## Path Parameters
+
+<ParamField path="id" type="string" required>
+  Website ID
+</ParamField>
+
+## Query Parameters
+
+<ParamField query="anchor_type" type="string" required>
+  Type of anchor point: `page` or `event`.
+</ParamField>
+
+<ParamField query="anchor_value" type="string" required>
+  The anchor value to analyze (page URL or event name). Maximum 500 characters.
+</ParamField>
+
+<ParamField query="direction" type="string" required>
+  Journey direction: `next` (what happens after) or `previous` (what happens before).
+</ParamField>
+
+<ParamField query="max_depth" type="integer" default="3">
+  Maximum depth of journey branches to analyze (1-5).
+</ParamField>
+
+<ParamField query="start_date" type="string" required>
+  Start date in `YYYY-MM-DD` format.
+</ParamField>
+
+<ParamField query="end_date" type="string" required>
+  End date in `YYYY-MM-DD` format.
+</ParamField>
+
+<ParamField query="timezone" type="string">
+  IANA timezone string (e.g., `America/New_York`). Required for accurate date boundary calculations.
+</ParamField>
+
+<ParamField query="include_bots" type="boolean">
+  Whether to include bot traffic in results. Defaults to website's bot policy setting.
+</ParamField>
+
+### Filter Parameters
+
+<ParamField query="filter_country" type="string">
+  ISO 3166-1 alpha-2 country code.
+</ParamField>
+
+<ParamField query="filter_page" type="string">
+  Filter by page URL path.
+</ParamField>
+
+<ParamField query="filter_referrer" type="string">
+  Filter by referrer domain.
+</ParamField>
+
+<ParamField query="filter_browser" type="string">
+  Filter by browser name.
+</ParamField>
+
+<ParamField query="filter_os" type="string">
+  Filter by operating system.
+</ParamField>
+
+<ParamField query="filter_device" type="string">
+  Filter by device type.
+</ParamField>
+
+<ParamField query="filter_language" type="string">
+  Filter by browser language.
+</ParamField>
+
+<ParamField query="filter_utm_source" type="string">
+  Filter by UTM source parameter.
+</ParamField>
+
+<ParamField query="filter_utm_medium" type="string">
+  Filter by UTM medium parameter.
+</ParamField>
+
+<ParamField query="filter_utm_campaign" type="string">
+  Filter by UTM campaign parameter.
+</ParamField>
+
+<ParamField query="filter_region" type="string">
+  Filter by geographic region/state.
+</ParamField>
+
+<ParamField query="filter_city" type="string">
+  Filter by city name.
+</ParamField>
+
+<ParamField query="filter_hostname" type="string">
+  Filter by hostname.
+</ParamField>
+
+## Response
+
+<ResponseField name="data" type="object">
+  User journey analysis results.
+
+  <ResponseField name="anchor" type="object">
+    The anchor point that was analyzed.
+
+    <ResponseField name="type" type="string">
+      Anchor type: `page` or `event`.
+    </ResponseField>
+
+    <ResponseField name="value" type="string">
+      The anchor value (page URL or event name).
+    </ResponseField>
+  </ResponseField>
+
+  <ResponseField name="direction" type="string">
+    Direction analyzed: `next` or `previous`.
+  </ResponseField>
+
+  <ResponseField name="max_depth" type="integer">
+    Maximum depth of branches analyzed.
+  </ResponseField>
+
+  <ResponseField name="total_anchor_sessions" type="integer">
+    Total number of sessions that included the anchor point.
+  </ResponseField>
+
+  <ResponseField name="branches" type="array">
+    Array of journey branches, sorted by session count descending.
+
+    <ResponseField name="nodes" type="array">
+      Array of node values representing the journey path (strings).
+    </ResponseField>
+
+    <ResponseField name="sessions" type="integer">
+      Number of sessions that followed this path.
+    </ResponseField>
+
+    <ResponseField name="share" type="number">
+      Percentage of total anchor sessions that followed this path (0-100).
+    </ResponseField>
+  </ResponseField>
+</ResponseField>
+
+## Example Request - Next Pages
+
+```bash
+curl -X GET "https://analytics.example.com/api/websites/abc123/journey?anchor_type=page&anchor_value=/pricing&direction=next&max_depth=3&start_date=2024-03-01&end_date=2024-03-07&timezone=America/New_York" \
+  -H "Authorization: Bearer spk_live_your_api_key"
+```
+
+## Example Response - Next Pages
+
+```json
+{
+  "data": {
+    "anchor": {
+      "type": "page",
+      "value": "/pricing"
+    },
+    "direction": "next",
+    "max_depth": 3,
+    "total_anchor_sessions": 1823,
+    "branches": [
+      {
+        "nodes": ["/signup"],
+        "sessions": 542,
+        "share": 29.7
+      },
+      {
+        "nodes": ["/features"],
+        "sessions": 389,
+        "share": 21.3
+      },
+      {
+        "nodes": ["/signup", "/onboarding"],
+        "sessions": 321,
+        "share": 17.6
+      },
+      {
+        "nodes": ["/"],
+        "sessions": 234,
+        "share": 12.8
+      },
+      {
+        "nodes": ["/features", "/signup"],
+        "sessions": 198,
+        "share": 10.9
+      },
+      {
+        "nodes": ["/signup", "/onboarding", "/dashboard"],
+        "sessions": 176,
+        "share": 9.7
+      },
+      {
+        "nodes": ["/docs"],
+        "sessions": 142,
+        "share": 7.8
+      }
+    ]
+  }
+}
+```
+
+## Example Request - Previous Events
+
+```bash
+curl -X GET "https://analytics.example.com/api/websites/abc123/journey?anchor_type=event&anchor_value=signup_completed&direction=previous&max_depth=2&start_date=2024-03-01&end_date=2024-03-07" \
+  -H "Authorization: Bearer spk_live_your_api_key"
+```
+
+## Example Response - Previous Events
+
+```json
+{
+  "data": {
+    "anchor": {
+      "type": "event",
+      "value": "signup_completed"
+    },
+    "direction": "previous",
+    "max_depth": 2,
+    "total_anchor_sessions": 618,
+    "branches": [
+      {
+        "nodes": ["/pricing"],
+        "sessions": 287,
+        "share": 46.4
+      },
+      {
+        "nodes": ["/", "/pricing"],
+        "sessions": 198,
+        "share": 32.0
+      },
+      {
+        "nodes": ["/features"],
+        "sessions": 89,
+        "share": 14.4
+      },
+      {
+        "nodes": ["/blog/getting-started", "/pricing"],
+        "sessions": 44,
+        "share": 7.1
+      }
+    ]
+  }
+}
+```
+
+## Rate Limits
+
+This endpoint has stricter rate limits due to computational complexity:
+
+- Concurrent query limit enforced via semaphore (5 second wait timeout)
+- May return 429 if query capacity is reached
+
+## Notes
+
+- Journey analysis is session-based (tracks paths within individual sessions)
+- The `nodes` array represents the sequence of pages/events in the journey
+- For `direction=next`, nodes show what happens after the anchor
+- For `direction=previous`, nodes show what happens before the anchor
+- Branches are sorted by session count in descending order (most common paths first)
+- The `share` percentage shows what portion of sessions that included the anchor followed each path
+- All shares sum to ≤100% (not all sessions may have subsequent/previous events)
+- Maximum depth controls how many steps in the journey are analyzed
+- Higher max_depth values may result in more granular but sparser data
+- Timezone parameter is recommended for accurate date boundary alignment
+- The anchor value must be non-empty and at most 500 characters

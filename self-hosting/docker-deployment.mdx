@@ -1,0 +1,268 @@
+---
+title: 'Docker Deployment'
+description: 'Deploy Sparklytics using Docker and docker-compose'
+---
+
+Sparklytics ships as a single Docker image with the backend, dashboard, and GeoIP database bundled together. No separate database container required.
+
+## Quick Start
+
+The fastest way to get Sparklytics running:
+
+<Steps>
+  <Step title="Download docker-compose.yml">
+    ```bash
+    curl -O https://raw.githubusercontent.com/Sparklytics/sparklytics/main/docker-compose.yml
+    ```
+  </Step>
+
+  <Step title="Start the container">
+    ```bash
+    docker compose up -d
+    ```
+  </Step>
+
+  <Step title="Access the dashboard">
+    Open `http://your-server-ip:3000` in your browser. You'll be guided through one-time setup to create your admin account.
+  </Step>
+</Steps>
+
+## Docker Compose Configuration
+
+Here's the complete `docker-compose.yml` file:
+
+```yaml
+version: '3.8'
+services:
+  sparklytics:
+    image: sparklytics/sparklytics:latest
+    ports:
+      - "3000:3000"
+    volumes:
+      - sparklytics-data:/data
+    environment:
+      # Auth mode: "local" (recommended), "password", or "none"
+      - SPARKLYTICS_AUTH=local
+
+      # IMPORTANT: keep "true" (default) when accessed over HTTPS.
+      # Only set to "false" for plain-HTTP local development.
+      - SPARKLYTICS_HTTPS=true
+
+      # DuckDB query memory. Raise to 2GB–8GB on a larger VPS.
+      - SPARKLYTICS_DUCKDB_MEMORY=1GB
+
+      # Restrict which origins can query the analytics API from a browser.
+      # Uncomment and set to your site(s):
+      # - SPARKLYTICS_CORS_ORIGINS=https://yoursite.com,https://www.yoursite.com
+    restart: unless-stopped
+
+volumes:
+  sparklytics-data:
+```
+
+### Key Configuration Points
+
+<AccordionGroup>
+  <Accordion title="Persistent Data Volume">
+    The `sparklytics-data` named volume stores your DuckDB database file. This ensures data persists across container restarts.
+
+    To use a host directory instead:
+    ```yaml
+    volumes:
+      - ./data:/data
+    ```
+  </Accordion>
+
+  <Accordion title="Auth Modes">
+    `SPARKLYTICS_AUTH` controls the authentication behavior:
+
+    | Mode | Value | First-run UX | Best for |
+    |------|-------|--------------|----------|
+    | Local auth (recommended) | `local` | Redirects to `/setup` once, then `/login` | Most self-hosted production installs |
+    | Env password | `password` | Redirects directly to `/login` | Simple single-password deployments |
+    | Open mode | `none` | No login/setup; dashboard opens directly | Local development only |
+
+    For `password` mode, add:
+    ```yaml
+    - SPARKLYTICS_PASSWORD=your-strong-password
+    ```
+  </Accordion>
+
+  <Accordion title="HTTPS Cookie Setting">
+    `SPARKLYTICS_HTTPS` controls whether session cookies have the `Secure` flag:
+
+    - `true` (default) — for production deployments behind HTTPS/TLS
+    - `false` — **only** for plain HTTP local development
+
+    If you're testing on `http://localhost` and login keeps failing, set this to `false`.
+  </Accordion>
+
+  <Accordion title="DuckDB Memory Limit">
+    `SPARKLYTICS_DUCKDB_MEMORY` sets the query memory limit. Default is `1GB`.
+
+    For better performance on larger VPS instances (16–32 GB RAM):
+    ```yaml
+    - SPARKLYTICS_DUCKDB_MEMORY=4GB
+    ```
+
+    Accepts any DuckDB size string: `512MB`, `1GB`, `2GB`, `8GB`, etc.
+  </Accordion>
+</AccordionGroup>
+
+## Running Without docker-compose
+
+If you prefer `docker run` directly:
+
+```bash
+docker run -d \
+  --name sparklytics \
+  -p 3000:3000 \
+  -v sparklytics-data:/data \
+  -e SPARKLYTICS_AUTH=local \
+  -e SPARKLYTICS_HTTPS=true \
+  -e SPARKLYTICS_DUCKDB_MEMORY=1GB \
+  sparklytics/sparklytics:latest
+```
+
+## Environment Variables Reference
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `SPARKLYTICS_AUTH` | `local` | Auth mode: `none`, `password`, or `local` |
+| `SPARKLYTICS_PASSWORD` | — | Required when `SPARKLYTICS_AUTH=password` |
+| `SPARKLYTICS_HTTPS` | `true` | Set `false` only for plain-HTTP local dev |
+| `SPARKLYTICS_PORT` | `3000` | Listen port |
+| `SPARKLYTICS_DATA_DIR` | `/data` | DuckDB data directory (inside container) |
+| `SPARKLYTICS_DUCKDB_MEMORY` | `1GB` | Query memory limit |
+| `SPARKLYTICS_CORS_ORIGINS` | — | Comma-separated allowed origins for analytics API |
+| `SPARKLYTICS_RETENTION_DAYS` | `365` | How long to keep raw events |
+| `SPARKLYTICS_GEOIP_PATH` | `/geoip/dbip-city-lite.mmdb` | Path to city MMDB (bundled in Docker image) |
+
+## First Launch Verification
+
+After starting the container, verify everything works:
+
+<Steps>
+  <Step title="Check health endpoint">
+    ```bash
+    curl http://localhost:3000/health
+    ```
+
+    Expected response:
+    ```json
+    {"status":"ok"}
+    ```
+  </Step>
+
+  <Step title="Complete setup (local mode only)">
+    Visit `http://localhost:3000/dashboard` — you'll be redirected to `/setup`.
+
+    Set your admin password (minimum 12 characters), then log in.
+  </Step>
+
+  <Step title="Send a test pageview">
+    ```bash
+    curl -X POST http://localhost:3000/api/collect \
+      -H 'content-type: application/json' \
+      -d '{
+        "website_id":"site_default",
+        "type":"pageview",
+        "url":"/test",
+        "referrer":"",
+        "screen":"1440x900",
+        "language":"en-US"
+      }'
+    ```
+
+    Expected response:
+    ```json
+    {"ok":true}
+    ```
+  </Step>
+</Steps>
+
+## Common Issues
+
+<AccordionGroup>
+  <Accordion title="Login succeeds but redirects back to login page">
+    **Cause:** Running over plain HTTP with `SPARKLYTICS_HTTPS=true`, so browser drops the `Secure` cookie.
+
+    **Fix:** Set `SPARKLYTICS_HTTPS=false` for localhost/non-TLS environments and restart:
+    ```bash
+    docker compose down
+    docker compose up -d
+    ```
+  </Accordion>
+
+  <Accordion title="Data disappears after container restart">
+    **Cause:** No persistent volume mounted.
+
+    **Fix:** Ensure your `docker-compose.yml` has the `volumes` section:
+    ```yaml
+    volumes:
+      - sparklytics-data:/data
+    ```
+  </Accordion>
+
+  <Accordion title="Container fails to start with SPARKLYTICS_AUTH=password">
+    **Cause:** Missing `SPARKLYTICS_PASSWORD` environment variable.
+
+    **Fix:** Add the password to your compose file:
+    ```yaml
+    - SPARKLYTICS_PASSWORD=your-strong-password
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Docker with Caddy (HTTPS)
+
+For production deployments with automatic HTTPS, see the [Reverse Proxy Setup](/self-hosting/reverse-proxy) guide.
+
+Quick preview:
+
+```bash
+curl -O https://raw.githubusercontent.com/Sparklytics/sparklytics/main/docker-compose.caddy.yml
+# Edit Caddyfile — replace analytics.example.com with your domain
+docker compose -f docker-compose.caddy.yml up -d
+```
+
+## Pre-built Images
+
+Sparklytics provides multi-arch Docker images:
+
+- `sparklytics/sparklytics:latest` — latest stable release
+- `sparklytics/sparklytics:v1.0.0` — specific version tag
+
+Supported architectures:
+- `linux/amd64`
+- `linux/arm64`
+
+Docker automatically pulls the correct image for your platform.
+
+## Updating
+
+To update to the latest version:
+
+```bash
+docker compose pull
+docker compose up -d
+```
+
+Your data persists in the `sparklytics-data` volume.
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Reverse Proxy Setup" icon="server" href="/self-hosting/reverse-proxy">
+    Configure Caddy, Nginx, or Traefik for HTTPS
+  </Card>
+  <Card title="HTTPS Setup" icon="lock" href="/self-hosting/https-setup">
+    SSL/TLS configuration and certificate management
+  </Card>
+  <Card title="Performance Tuning" icon="gauge-high" href="/self-hosting/performance-tuning">
+    Optimize for high-traffic deployments
+  </Card>
+  <Card title="HTML Snippet" icon="code" href="/integrations/html-snippet">
+    Add tracking to your website
+  </Card>
+</CardGroup>

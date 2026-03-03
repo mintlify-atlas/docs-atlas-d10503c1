@@ -1,0 +1,379 @@
+---
+title: Custom Event Tracking
+description: Track user interactions, conversions, and custom metrics with Sparklytics event tracking API.
+---
+
+## Overview
+
+Beyond automatic pageview tracking, Sparklytics lets you track any custom event with optional structured properties. Use custom events to measure:
+
+- Button clicks and form submissions
+- User interactions (video plays, downloads, shares)
+- E-commerce events (add to cart, purchase, checkout)
+- Feature usage and engagement metrics
+
+## Tracking Events
+
+### JavaScript (Browser)
+
+Use the global `window.sparklytics` object to track events:
+
+```javascript
+// Simple event
+window.sparklytics?.track('signup_click')
+
+// Event with properties
+window.sparklytics?.track('purchase', {
+  plan: 'pro',
+  amount: 49.99,
+  currency: 'USD'
+})
+```
+
+### Next.js SDK
+
+Use the `useSparklytics` hook in React components:
+
+```tsx
+'use client'
+import { useSparklytics } from '@sparklytics/next'
+
+export function PricingCard() {
+  const { track } = useSparklytics()
+  
+  return (
+    <button onClick={() => track('plan_selected', { plan: 'pro' })}>
+      Get Pro
+    </button>
+  )
+}
+```
+
+### Declarative Tracking Component
+
+The `<SparklyticsEvent>` component tracks events on click:
+
+```tsx
+import { SparklyticsEvent } from '@sparklytics/next'
+
+<SparklyticsEvent name="demo_request" data={{ source: 'pricing' }}>
+  <button>Request Demo</button>
+</SparklyticsEvent>
+```
+
+## Event Properties
+
+Event properties let you attach structured data to events for filtering and analysis.
+
+### Property Types
+
+Properties are stored as JSON and support:
+
+- **Strings**: `"pro"`, `"credit_card"`
+- **Numbers**: `49.99`, `3`
+- **Booleans**: `true`, `false`
+- **Nested objects**: `{ product: { id: 123, name: "Widget" } }`
+
+### Limits
+
+<Note>
+Each event's `event_data` JSON must be under 4 KB. The total request body (including all events in a batch) is limited to 100 KB.
+</Note>
+
+From `crates/sparklytics-server/src/routes/collect.rs:15`:
+
+```rust
+/// Maximum allowed body size for POST /api/collect (100 KB).
+pub const COLLECT_BODY_LIMIT: usize = 102_400;
+/// Maximum allowed size for a single event's `event_data` JSON string (4 KB).
+const EVENT_DATA_MAX_BYTES: usize = 4_096;
+```
+
+## Collecting Events
+
+### Ingest API
+
+Events are sent to the collection endpoint:
+
+```bash
+POST /api/collect
+Content-Type: application/json
+```
+
+### Single Event
+
+```json
+{
+  "website_id": "cm5x9yz1a0001...",
+  "event_type": "custom",
+  "event_name": "signup_click",
+  "url": "https://example.com/pricing",
+  "event_data": "{\"plan\":\"pro\"}"
+}
+```
+
+### Batch Events
+
+Send up to 50 events in a single request:
+
+```json
+[
+  {
+    "website_id": "cm5x9yz1a0001...",
+    "event_type": "custom",
+    "event_name": "add_to_cart",
+    "event_data": "{\"product_id\":123}"
+  },
+  {
+    "website_id": "cm5x9yz1a0001...",
+    "event_type": "custom",
+    "event_name": "checkout_start",
+    "event_data": "{\"cart_value\":149.99}"
+  }
+]
+```
+
+### Response
+
+Successful ingestion returns:
+
+```json
+{
+  "ok": true
+}
+```
+
+HTTP status: `202 Accepted`
+
+## Querying Events
+
+Sparklytics provides three endpoints for analyzing custom events.
+
+### List Event Names
+
+Get all custom event names for a date range:
+
+```bash
+GET /api/websites/{website_id}/events?start_date=2026-02-01&end_date=2026-03-01
+```
+
+Response:
+
+```json
+{
+  "data": [
+    { "event_name": "signup_click", "count": 342 },
+    { "event_name": "purchase", "count": 89 },
+    { "event_name": "demo_request", "count": 156 }
+  ]
+}
+```
+
+### Event Properties Breakdown
+
+Analyze property key/value pairs for a specific event:
+
+```bash
+GET /api/websites/{website_id}/events/properties?event_name=purchase
+```
+
+Response:
+
+```json
+{
+  "data": [
+    {
+      "property_key": "plan",
+      "values": [
+        { "value": "pro", "count": 56 },
+        { "value": "enterprise", "count": 33 }
+      ]
+    },
+    {
+      "property_key": "currency",
+      "values": [
+        { "value": "USD", "count": 72 },
+        { "value": "EUR", "count": 17 }
+      ]
+    }
+  ]
+}
+```
+
+### Event Time Series
+
+Get time-series data for a specific event:
+
+```bash
+GET /api/websites/{website_id}/events/timeseries?event_name=signup_click&granularity=day
+```
+
+Response:
+
+```json
+{
+  "data": {
+    "series": [
+      { "date": "2026-02-01", "count": 23 },
+      { "date": "2026-02-02", "count": 31 },
+      { "date": "2026-02-03", "count": 28 }
+    ],
+    "granularity": "day"
+  }
+}
+```
+
+## Implementation Details
+
+### Server-Side Enrichment
+
+Custom events are enriched with the same metadata as pageviews:
+
+- **Visitor ID**: Privacy-preserving hash computed server-side
+- **Session ID**: 30-minute inactivity timeout
+- **GeoIP data**: Country, region, city (if GeoIP database is configured)
+- **User agent parsing**: Browser, OS, device type
+- **Referrer extraction**: Domain and full URL
+- **UTM parameters**: Source, medium, campaign
+
+### Buffering & Flushing
+
+From the CHANGELOG:
+
+> In-memory event buffer with 5-second flush interval and 100-event immediate flush
+
+Events are batched in memory and written to DuckDB/ClickHouse:
+- Every 5 seconds (time-based flush)
+- When 100 events accumulate (size-based flush)
+- On server shutdown (graceful flush)
+
+### Event Name Validation
+
+From `crates/sparklytics-server/src/routes/events.rs:100`:
+
+```rust
+fn require_event_name(event_name: Option<String>) -> Result<String, AppError> {
+    let Some(event_name) = event_name else {
+        return Err(AppError::BadRequest(
+            "event_name query parameter is required".to_string(),
+        ));
+    };
+    let trimmed = event_name.trim();
+    if trimmed.is_empty() {
+        return Err(AppError::BadRequest(
+            "event_name must not be empty".to_string(),
+        ));
+    }
+    if trimmed.len() > 255 {
+        return Err(AppError::BadRequest(
+            "event_name must be 255 characters or fewer".to_string(),
+        ));
+    }
+    Ok(trimmed.to_string())
+}
+```
+
+## Best Practices
+
+### Naming Conventions
+
+Use consistent, descriptive event names:
+
+```javascript
+// Good
+track('checkout_completed')
+track('video_played')
+track('filter_applied')
+
+// Avoid
+track('click')
+track('event1')
+track('userAction')
+```
+
+### Property Structure
+
+Keep properties flat and typed:
+
+```javascript
+// Good
+track('purchase', {
+  product_id: 123,
+  amount: 49.99,
+  currency: 'USD'
+})
+
+// Avoid deep nesting
+track('purchase', {
+  details: {
+    product: {
+      info: { id: 123 }
+    }
+  }
+})
+```
+
+### Error Handling
+
+The SDK handles offline tracking gracefully:
+
+```javascript
+// SDK automatically queues events if offline
+window.sparklytics?.track('offline_action')
+
+// Uses sendBeacon for reliability on page unload
+window.addEventListener('beforeunload', () => {
+  // Events queued automatically flushed
+})
+```
+
+## Use Cases
+
+### E-commerce Tracking
+
+```javascript
+// Product view
+track('product_viewed', { product_id: 'widget-pro', price: 99 })
+
+// Add to cart
+track('add_to_cart', { product_id: 'widget-pro', quantity: 2 })
+
+// Purchase
+track('purchase', { 
+  order_id: 'ord_123',
+  total: 198,
+  items: 2 
+})
+```
+
+### Feature Engagement
+
+```javascript
+// Track feature usage
+track('feature_used', { feature: 'export', format: 'csv' })
+
+// Track settings changes
+track('setting_changed', { setting: 'theme', value: 'dark' })
+```
+
+### Content Interaction
+
+```javascript
+// Video engagement
+track('video_play', { video_id: 'demo-2024', duration: 0 })
+track('video_complete', { video_id: 'demo-2024', duration: 120 })
+
+// Download tracking
+track('file_download', { file: 'whitepaper.pdf', size_mb: 2.4 })
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Funnels" icon="filter" href="/features/funnels">
+    Build conversion funnels from custom events
+  </Card>
+  <Card title="Journey Analysis" icon="route" href="/features/journey-analysis">
+    Explore user paths between events
+  </Card>
+</CardGroup>

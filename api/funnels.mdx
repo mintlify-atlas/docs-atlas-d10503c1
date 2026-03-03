@@ -1,0 +1,232 @@
+---
+title: 'Get Funnel Results'
+api: 'GET /api/websites/:id/funnels/:funnel_id/results'
+description: 'Retrieve conversion funnel analysis showing step-by-step drop-off rates and conversion metrics.'
+---
+
+## Path Parameters
+
+<ParamField path="id" type="string" required>
+  Website ID
+</ParamField>
+
+<ParamField path="funnel_id" type="string" required>
+  Funnel ID
+</ParamField>
+
+## Query Parameters
+
+<ParamField query="start_date" type="string" required>
+  Start date in `YYYY-MM-DD` format.
+</ParamField>
+
+<ParamField query="end_date" type="string" required>
+  End date in `YYYY-MM-DD` format.
+</ParamField>
+
+<ParamField query="timezone" type="string">
+  IANA timezone string (e.g., `America/New_York`). Required for accurate date boundary calculations.
+</ParamField>
+
+<ParamField query="include_bots" type="boolean">
+  Whether to include bot traffic in results. Defaults to website's bot policy setting.
+</ParamField>
+
+### Filter Parameters
+
+<ParamField query="filter_country" type="string">
+  ISO 3166-1 alpha-2 country code.
+</ParamField>
+
+<ParamField query="filter_page" type="string">
+  Filter by page URL path.
+</ParamField>
+
+<ParamField query="filter_referrer" type="string">
+  Filter by referrer domain.
+</ParamField>
+
+<ParamField query="filter_browser" type="string">
+  Filter by browser name.
+</ParamField>
+
+<ParamField query="filter_os" type="string">
+  Filter by operating system.
+</ParamField>
+
+<ParamField query="filter_device" type="string">
+  Filter by device type.
+</ParamField>
+
+<ParamField query="filter_language" type="string">
+  Filter by browser language.
+</ParamField>
+
+<ParamField query="filter_utm_source" type="string">
+  Filter by UTM source parameter.
+</ParamField>
+
+<ParamField query="filter_utm_medium" type="string">
+  Filter by UTM medium parameter.
+</ParamField>
+
+<ParamField query="filter_utm_campaign" type="string">
+  Filter by UTM campaign parameter.
+</ParamField>
+
+<ParamField query="filter_region" type="string">
+  Filter by geographic region/state.
+</ParamField>
+
+<ParamField query="filter_city" type="string">
+  Filter by city name.
+</ParamField>
+
+<ParamField query="filter_hostname" type="string">
+  Filter by hostname.
+</ParamField>
+
+## Response
+
+<ResponseField name="data" type="object">
+  Funnel analysis results.
+
+  <ResponseField name="funnel_id" type="string">
+    The ID of the funnel.
+  </ResponseField>
+
+  <ResponseField name="name" type="string">
+    The name of the funnel.
+  </ResponseField>
+
+  <ResponseField name="total_sessions_entered" type="integer">
+    Total number of sessions that entered the funnel (reached the first step).
+  </ResponseField>
+
+  <ResponseField name="final_conversion_rate" type="number">
+    Percentage of sessions that completed all steps (0-100).
+  </ResponseField>
+
+  <ResponseField name="steps" type="array">
+    Array of step results in order.
+
+    <ResponseField name="step_order" type="integer">
+      Step position (1-based index).
+    </ResponseField>
+
+    <ResponseField name="label" type="string">
+      Human-readable label for this step.
+    </ResponseField>
+
+    <ResponseField name="sessions_reached" type="integer">
+      Number of sessions that reached this step.
+    </ResponseField>
+
+    <ResponseField name="drop_off_count" type="integer">
+      Number of sessions that dropped off after this step.
+    </ResponseField>
+
+    <ResponseField name="drop_off_rate" type="number">
+      Percentage of sessions that dropped off at this step (0-100).
+    </ResponseField>
+
+    <ResponseField name="conversion_rate_from_start" type="number">
+      Percentage of initial sessions that reached this step (0-100).
+    </ResponseField>
+
+    <ResponseField name="conversion_rate_from_previous" type="number">
+      Percentage of sessions from the previous step that reached this step (0-100).
+    </ResponseField>
+  </ResponseField>
+</ResponseField>
+
+## Example Request
+
+```bash
+curl -X GET "https://analytics.example.com/api/websites/abc123/funnels/funnel_xyz/results?start_date=2024-03-01&end_date=2024-03-07&timezone=America/New_York" \
+  -H "Authorization: Bearer spk_live_your_api_key"
+```
+
+## Example Response
+
+```json
+{
+  "data": {
+    "funnel_id": "funnel_xyz",
+    "name": "Signup Flow",
+    "total_sessions_entered": 2543,
+    "final_conversion_rate": 24.3,
+    "steps": [
+      {
+        "step_order": 1,
+        "label": "Landing Page",
+        "sessions_reached": 2543,
+        "drop_off_count": 891,
+        "drop_off_rate": 35.0,
+        "conversion_rate_from_start": 100.0,
+        "conversion_rate_from_previous": 100.0
+      },
+      {
+        "step_order": 2,
+        "label": "Pricing Page",
+        "sessions_reached": 1652,
+        "drop_off_count": 542,
+        "drop_off_rate": 32.8,
+        "conversion_rate_from_start": 65.0,
+        "conversion_rate_from_previous": 65.0
+      },
+      {
+        "step_order": 3,
+        "label": "Signup Form",
+        "sessions_reached": 1110,
+        "drop_off_count": 321,
+        "drop_off_rate": 28.9,
+        "conversion_rate_from_start": 43.6,
+        "conversion_rate_from_previous": 67.2
+      },
+      {
+        "step_order": 4,
+        "label": "Account Created",
+        "sessions_reached": 789,
+        "drop_off_count": 171,
+        "drop_off_rate": 21.7,
+        "conversion_rate_from_start": 31.0,
+        "conversion_rate_from_previous": 71.1
+      },
+      {
+        "step_order": 5,
+        "label": "First Project Created",
+        "sessions_reached": 618,
+        "drop_off_count": 0,
+        "drop_off_rate": 0.0,
+        "conversion_rate_from_start": 24.3,
+        "conversion_rate_from_previous": 78.3
+      }
+    ]
+  }
+}
+```
+
+## Rate Limits
+
+This endpoint has stricter rate limits due to computational complexity:
+
+- 10 requests per minute per client IP
+- 20 requests per minute per website
+- Concurrent query limit enforced via semaphore (5 second wait timeout)
+
+## Constraints
+
+- Date range is limited to 90 days maximum
+- Default date range is 30 days if not specified
+- Funnels must have between 2 and 8 steps
+- Maximum of 20 funnels per website
+
+## Notes
+
+- Funnel analysis is session-based (tracks user journeys within sessions)
+- Steps must occur in order within a session to count as progression
+- The final step has a `drop_off_count` of 0 and `drop_off_rate` of 0
+- `conversion_rate_from_start` shows what percentage of initial sessions reached each step
+- `conversion_rate_from_previous` shows the step-to-step conversion rate
+- Timezone parameter is recommended for accurate date boundary alignment

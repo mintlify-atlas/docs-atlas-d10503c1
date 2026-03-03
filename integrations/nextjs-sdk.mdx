@@ -1,0 +1,417 @@
+---
+title: "Next.js SDK"
+description: "First-class Next.js integration with automatic pageview tracking for App Router and Pages Router"
+---
+
+The `@sparklytics/next` SDK provides seamless analytics for Next.js applications with automatic route tracking, React hooks, and TypeScript support.
+
+## Installation
+
+<CodeGroup>
+```bash npm
+npm install @sparklytics/next
+```
+
+```bash pnpm
+pnpm add @sparklytics/next
+```
+
+```bash yarn
+yarn add @sparklytics/next
+```
+</CodeGroup>
+
+## App Router Setup
+
+<Steps>
+  <Step title="Wrap your app with SparklyticsProvider">
+    Add the provider to your root layout:
+
+    ```tsx app/layout.tsx
+    import { SparklyticsProvider } from '@sparklytics/next'
+
+    export default function RootLayout({ children }: { children: React.ReactNode }) {
+      return (
+        <html lang="en">
+          <body>
+            <SparklyticsProvider
+              host="https://analytics.example.com"
+              websiteId="YOUR_WEBSITE_ID"
+            >
+              {children}
+            </SparklyticsProvider>
+          </body>
+        </html>
+      )
+    }
+    ```
+  </Step>
+
+  <Step title="Track custom events in Client Components">
+    Use the `useSparklytics` hook:
+
+    ```tsx components/SignupButton.tsx
+    'use client'
+    import { useSparklytics } from '@sparklytics/next'
+
+    export function SignupButton() {
+      const { track } = useSparklytics()
+
+      return (
+        <button onClick={() => track('signup_click', { plan: 'pro' })}>
+          Get started
+        </button>
+      )
+    }
+    ```
+  </Step>
+
+  <Step title="Verify tracking">
+    Navigate between routes in your app. Pageviews should appear in the Sparklytics dashboard automatically.
+  </Step>
+</Steps>
+
+## Pages Router Setup
+
+<Steps>
+  <Step title="Wrap your app in _app.tsx">
+    ```tsx pages/_app.tsx
+    import type { AppProps } from 'next/app'
+    import { SparklyticsProvider } from '@sparklytics/next'
+
+    export default function App({ Component, pageProps }: AppProps) {
+      return (
+        <SparklyticsProvider
+          host="https://analytics.example.com"
+          websiteId="YOUR_WEBSITE_ID"
+        >
+          <Component {...pageProps} />
+        </SparklyticsProvider>
+      )
+    }
+    ```
+  </Step>
+
+  <Step title="Track custom events">
+    ```tsx pages/pricing.tsx
+    import { useSparklytics } from '@sparklytics/next'
+
+    export default function PricingPage() {
+      const { track } = useSparklytics()
+
+      return (
+        <button onClick={() => track('plan_selected', { plan: 'enterprise' })}>
+          Contact Sales
+        </button>
+      )
+    }
+    ```
+  </Step>
+</Steps>
+
+## Configuration Options
+
+Configure `SparklyticsProvider` with these props:
+
+| Prop | Type | Required | Description |
+|------|------|----------|-------------|
+| `host` | `string` | Yes | Your Sparklytics server URL |
+| `websiteId` | `string` | Yes | Website ID from dashboard |
+| `disabled` | `boolean` | No | Disable tracking (useful for dev) |
+| `respectDnt` | `boolean` | No | Respect DNT/GPC signals (default: `true`) |
+| `excludeHash` | `boolean` | No | Skip tracking hash-only route changes |
+| `trackLinks` | `boolean \| "outbound"` | No | Track link clicks |
+| `trackScrollDepth` | `boolean \| number[]` | No | Track scroll milestones |
+| `trackForms` | `boolean` | No | Track form submissions |
+
+### Example: Development Mode
+
+```tsx app/layout.tsx
+import { SparklyticsProvider } from '@sparklytics/next'
+
+const isDev = process.env.NODE_ENV === 'development'
+
+export default function RootLayout({ children }: { children: React.ReactNode }) {
+  return (
+    <html lang="en">
+      <body>
+        <SparklyticsProvider
+          host="https://analytics.example.com"
+          websiteId="abc123"
+          disabled={isDev} // Don't track in development
+        >
+          {children}
+        </SparklyticsProvider>
+      </body>
+    </html>
+  )
+}
+```
+
+### Example: All Features Enabled
+
+```tsx app/layout.tsx
+import { SparklyticsProvider } from '@sparklytics/next'
+
+export default function RootLayout({ children }: { children: React.ReactNode }) {
+  return (
+    <html lang="en">
+      <body>
+        <SparklyticsProvider
+          host="https://analytics.example.com"
+          websiteId="abc123"
+          trackLinks="outbound"
+          trackScrollDepth={[25, 50, 75, 100]}
+          trackForms
+        >
+          {children}
+        </SparklyticsProvider>
+      </body>
+    </html>
+  )
+}
+```
+
+## Tracking Custom Events
+
+The `useSparklytics` hook provides access to the tracking API:
+
+<Tabs>
+  <Tab title="Basic Event">
+    ```tsx
+    'use client'
+    import { useSparklytics } from '@sparklytics/next'
+
+    export function NewsletterForm() {
+      const { track } = useSparklytics()
+
+      const handleSubmit = () => {
+        track('newsletter_signup')
+        // ... submit logic
+      }
+
+      return <form onSubmit={handleSubmit}>...</form>
+    }
+    ```
+  </Tab>
+
+  <Tab title="Event with Data">
+    ```tsx
+    'use client'
+    import { useSparklytics } from '@sparklytics/next'
+
+    export function ProductCard({ product }) {
+      const { track } = useSparklytics()
+
+      const handleAddToCart = () => {
+        track('add_to_cart', {
+          product_id: product.id,
+          product_name: product.name,
+          price: product.price,
+          currency: 'USD'
+        })
+        // ... add to cart logic
+      }
+
+      return (
+        <button onClick={handleAddToCart}>
+          Add to Cart
+        </button>
+      )
+    }
+    ```
+  </Tab>
+
+  <Tab title="E-commerce">
+    ```tsx
+    'use client'
+    import { useSparklytics } from '@sparklytics/next'
+
+    export function CheckoutButton({ cart }) {
+      const { track } = useSparklytics()
+
+      const handleCheckout = () => {
+        track('checkout_initiated', {
+          cart_value: cart.total,
+          item_count: cart.items.length,
+          currency: 'USD'
+        })
+        // ... checkout logic
+      }
+
+      return <button onClick={handleCheckout}>Checkout</button>
+    }
+    ```
+  </Tab>
+</Tabs>
+
+## Visitor Identification
+
+Identify logged-in users to track their journey across sessions:
+
+<CodeGroup>
+```tsx Identify User
+'use client'
+import { useSparklytics } from '@sparklytics/next'
+
+export function LoginHandler() {
+  const { identify } = useSparklytics()
+
+  const handleLogin = async (userId: string) => {
+    // After successful login
+    identify(userId)
+    // ... rest of login logic
+  }
+
+  return <LoginForm onSubmit={handleLogin} />
+}
+```
+
+```tsx Reset on Logout
+'use client'
+import { useSparklytics } from '@sparklytics/next'
+
+export function LogoutButton() {
+  const { reset } = useSparklytics()
+
+  const handleLogout = () => {
+    reset() // Clear visitor ID
+    // ... rest of logout logic
+  }
+
+  return <button onClick={handleLogout}>Logout</button>
+}
+```
+</CodeGroup>
+
+<Note>
+  Identified visitor IDs persist in `localStorage` and are automatically included in all subsequent events.
+</Note>
+
+## TypeScript Support
+
+The SDK is fully typed. Define custom event types for type-safe tracking:
+
+```tsx types/analytics.ts
+import { useSparklytics } from '@sparklytics/next'
+
+type CustomEvents = 
+  | { name: 'signup_click', data: { plan: 'free' | 'pro' | 'enterprise' } }
+  | { name: 'add_to_cart', data: { product_id: string, price: number } }
+  | { name: 'newsletter_signup', data?: never }
+
+export function useTypedAnalytics() {
+  const { track, ...rest } = useSparklytics()
+
+  return {
+    ...rest,
+    track: <T extends CustomEvents>(name: T['name'], data?: T['data']) => {
+      track(name, data)
+    }
+  }
+}
+```
+
+```tsx components/PricingCard.tsx
+'use client'
+import { useTypedAnalytics } from '@/types/analytics'
+
+export function PricingCard() {
+  const { track } = useTypedAnalytics()
+
+  return (
+    <button onClick={() => track('signup_click', { plan: 'pro' })}>
+      {/* TypeScript ensures 'plan' is 'free' | 'pro' | 'enterprise' */}
+      Get Started
+    </button>
+  )
+}
+```
+
+## Environment Variables
+
+Store credentials in `.env.local`:
+
+```bash .env.local
+NEXT_PUBLIC_SPARKLYTICS_HOST=https://analytics.example.com
+NEXT_PUBLIC_SPARKLYTICS_WEBSITE_ID=your-website-id
+```
+
+```tsx app/layout.tsx
+import { SparklyticsProvider } from '@sparklytics/next'
+
+export default function RootLayout({ children }: { children: React.ReactNode }) {
+  return (
+    <html lang="en">
+      <body>
+        <SparklyticsProvider
+          host={process.env.NEXT_PUBLIC_SPARKLYTICS_HOST!}
+          websiteId={process.env.NEXT_PUBLIC_SPARKLYTICS_WEBSITE_ID!}
+        >
+          {children}
+        </SparklyticsProvider>
+      </body>
+    </html>
+  )
+}
+```
+
+## Performance
+
+- **Bundle size**: < 5 KB gzipped
+- **Zero runtime overhead**: Pageview tracking happens asynchronously
+- **No layout shift**: Script loads after hydration
+- **Supports Turbopack**: Works with `next dev --turbo`
+
+## Comparison: SDK vs HTML Snippet
+
+| Feature | `@sparklytics/next` | HTML Snippet |
+|---------|---------------------|---------------|
+| Auto pageview tracking | ✅ App Router + Pages Router | ✅ Via `pushState` interception |
+| React hooks | ✅ `useSparklytics()` | ❌ Use `window.sparklytics` |
+| TypeScript support | ✅ Full types | ❌ |
+| SSR/SSG compatible | ✅ | ⚠️ Only after hydration |
+| Bundle size | < 5 KB | < 5 KB |
+| Configuration | ✅ Props | ⚠️ `data-*` attributes |
+
+<Tip>
+  Use the SDK for Next.js projects. Use the HTML snippet for static sites, WordPress, or non-React frameworks.
+</Tip>
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Pageviews not appearing">
+    1. Check the browser console for errors
+    2. Verify `host` and `websiteId` are correct
+    3. Ensure your Sparklytics server is reachable
+    4. Check `disabled` prop is not set to `true`
+  </Accordion>
+
+  <Accordion title="Duplicate pageviews on route change">
+    Make sure you're not also using the HTML snippet. The SDK handles route tracking automatically.
+  </Accordion>
+
+  <Accordion title="TypeScript errors">
+    Ensure you're using Next.js 15+ and React 19+. The SDK requires:
+    - `next@^15.0.0`
+    - `react@^19.0.0`
+    - `react-dom@^19.0.0`
+  </Accordion>
+
+  <Accordion title="Hook not working in Server Components">
+    `useSparklytics` only works in Client Components. Add `'use client'` at the top of your file.
+  </Accordion>
+</AccordionGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Vue SDK" icon="vuejs" href="/integrations/vue-sdk">
+    Vue.js integration with Composition API support
+  </Card>
+
+  <Card title="Custom Integration" icon="code" href="/integrations/custom-integration">
+    Build your own SDK using the API
+  </Card>
+</CardGroup>

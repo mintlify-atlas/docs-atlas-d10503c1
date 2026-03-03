@@ -1,0 +1,427 @@
+---
+title: 'HTTPS/TLS Configuration'
+description: 'SSL/TLS certificate setup and HTTPS configuration for Sparklytics'
+---
+
+HTTPS is strongly recommended for production deployments. It protects session cookies and prevents man-in-the-middle attacks on your analytics data.
+
+## Why HTTPS Matters for Sparklytics
+
+<AccordionGroup>
+  <Accordion title="Secure Cookie Flag">
+    When `SPARKLYTICS_HTTPS=true` (default), session cookies are marked with the `Secure` flag. This means:
+
+    - Cookies only transmit over HTTPS connections
+    - Protection against session hijacking
+    - Required for browsers' cookie security policies
+
+    Without HTTPS, you must set `SPARKLYTICS_HTTPS=false` or login will fail silently.
+  </Accordion>
+
+  <Accordion title="Data Integrity">
+    Analytics collection endpoints (`/api/collect`) transmit:
+    - Pageview URLs (may contain sensitive paths)
+    - Referrer information
+    - Custom event properties
+
+    HTTPS prevents interception and tampering.
+  </Accordion>
+
+  <Accordion title="Modern Browser Requirements">
+    Many browsers require HTTPS for:
+    - `localStorage` access (used by SDK for visitor ID)
+    - Service workers (future features)
+    - Secure contexts for newer JavaScript APIs
+  </Accordion>
+</AccordionGroup>
+
+## Automatic HTTPS with Caddy
+
+Caddy obtains and renews certificates automatically — **zero manual configuration required**.
+
+### Setup
+
+<Steps>
+  <Step title="Download Caddy configuration">
+    ```bash
+    curl -O https://raw.githubusercontent.com/Sparklytics/sparklytics/main/docker-compose.caddy.yml
+    curl -O https://raw.githubusercontent.com/Sparklytics/sparklytics/main/Caddyfile
+    ```
+  </Step>
+
+  <Step title="Edit Caddyfile">
+    Replace `analytics.example.com` with your domain:
+
+    ```caddyfile
+    analytics.yourdomain.com {
+        reverse_proxy sparklytics:3000
+    }
+    ```
+  </Step>
+
+  <Step title="Configure DNS">
+    Point your domain to your server's IP:
+
+    ```
+    analytics.yourdomain.com  A  203.0.113.10
+    ```
+
+    Wait for DNS propagation (can take up to 48 hours, usually minutes).
+  </Step>
+
+  <Step title="Start services">
+    ```bash
+    docker compose -f docker-compose.caddy.yml up -d
+    ```
+
+    Caddy automatically:
+    - Obtains a Let's Encrypt certificate
+    - Configures HTTPS on port 443
+    - Redirects HTTP (port 80) to HTTPS
+    - Renews certificates before expiry
+  </Step>
+
+  <Step title="Verify certificate">
+    Visit `https://analytics.yourdomain.com`
+
+    Check:
+    - Browser shows padlock icon
+    - Certificate issuer: Let's Encrypt
+    - Valid expiry date (90 days from issue)
+  </Step>
+</Steps>
+
+### How Caddy Handles Certificates
+
+- **Challenge type:** HTTP-01 (requires port 80 accessible)
+- **Storage:** Certificates stored in Docker volume `caddy-data`
+- **Renewal:** Automatic, checks daily, renews at 30 days before expiry
+- **Rate limits:** Let's Encrypt allows 50 certificates per domain per week
+
+## Manual HTTPS with Certbot (Nginx/Standalone)
+
+For Nginx or standalone deployments without Caddy.
+
+### Install Certbot
+
+<CodeGroup>
+```bash Ubuntu/Debian
+sudo apt update
+sudo apt install certbot python3-certbot-nginx
+```
+
+```bash CentOS/RHEL
+sudo yum install certbot python3-certbot-nginx
+```
+
+```bash macOS
+brew install certbot
+```
+</CodeGroup>
+
+### Obtain Certificate with Nginx Plugin
+
+<Steps>
+  <Step title="Ensure Nginx is running">
+    ```bash
+    sudo systemctl status nginx
+    ```
+  </Step>
+
+  <Step title="Run Certbot">
+    ```bash
+    sudo certbot --nginx -d analytics.example.com
+    ```
+
+    Certbot will:
+    - Verify domain ownership via HTTP-01 challenge
+    - Obtain certificate from Let's Encrypt
+    - Automatically modify your Nginx config
+    - Set up HTTP to HTTPS redirect
+  </Step>
+
+  <Step title="Test automatic renewal">
+    ```bash
+    sudo certbot renew --dry-run
+    ```
+
+    If successful, certificates will auto-renew via systemd timer.
+  </Step>
+</Steps>
+
+### Standalone Mode (Without Nginx Plugin)
+
+If you want to manually configure Nginx:
+
+```bash
+sudo certbot certonly --standalone -d analytics.example.com
+```
+
+Certificates will be saved to:
+```
+/etc/letsencrypt/live/analytics.example.com/fullchain.pem
+/etc/letsencrypt/live/analytics.example.com/privkey.pem
+```
+
+Then update your Nginx config:
+
+```nginx
+server {
+    listen 443 ssl http2;
+    server_name analytics.example.com;
+
+    ssl_certificate /etc/letsencrypt/live/analytics.example.com/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/analytics.example.com/privkey.pem;
+
+    # ... rest of config
+}
+```
+
+## SSL/TLS Best Practices
+
+### Modern TLS Configuration
+
+#### Caddy (Automatic)
+
+Caddy uses secure defaults automatically. No manual TLS configuration needed.
+
+#### Nginx (Manual)
+
+```nginx
+ssl_protocols TLSv1.2 TLSv1.3;
+ssl_ciphers 'ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384';
+ssl_prefer_server_ciphers off;
+
+# OCSP Stapling
+ssl_stapling on;
+ssl_stapling_verify on;
+ssl_trusted_certificate /etc/letsencrypt/live/analytics.example.com/chain.pem;
+
+# Session cache
+ssl_session_cache shared:SSL:10m;
+ssl_session_timeout 10m;
+```
+
+### Security Headers
+
+Add these headers to enforce HTTPS and prevent common attacks:
+
+#### Caddy
+
+```caddyfile
+analytics.example.com {
+    reverse_proxy sparklytics:3000
+
+    header {
+        Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+        X-Content-Type-Options "nosniff"
+        X-Frame-Options "DENY"
+        Referrer-Policy "strict-origin-when-cross-origin"
+        Permissions-Policy "geolocation=(), microphone=(), camera=()"
+    }
+}
+```
+
+#### Nginx
+
+```nginx
+add_header Strict-Transport-Security "max-age=31536000; includeSubDomains; preload" always;
+add_header X-Content-Type-Options "nosniff" always;
+add_header X-Frame-Options "DENY" always;
+add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+add_header Permissions-Policy "geolocation=(), microphone=(), camera=()" always;
+```
+
+## Certificate Renewal
+
+### Automatic Renewal
+
+<Tabs>
+  <Tab title="Caddy">
+    Caddy handles renewal automatically. Check logs to verify:
+
+    ```bash
+    docker logs caddy 2>&1 | grep -i "certificate"
+    ```
+  </Tab>
+
+  <Tab title="Certbot (systemd)">
+    Certbot installs a systemd timer for automatic renewal:
+
+    ```bash
+    # Check timer status
+    sudo systemctl status certbot.timer
+
+    # View next renewal time
+    sudo certbot certificates
+    ```
+
+    Renewal happens automatically twice daily. Certificates renew at 30 days before expiry.
+  </Tab>
+
+  <Tab title="Certbot (cron)">
+    If systemd timer isn't available, add to crontab:
+
+    ```bash
+    sudo crontab -e
+    ```
+
+    Add:
+    ```cron
+    0 0,12 * * * certbot renew --quiet
+    ```
+  </Tab>
+</Tabs>
+
+### Manual Renewal
+
+To force renewal immediately:
+
+```bash
+sudo certbot renew --force-renewal
+sudo systemctl reload nginx
+```
+
+## Custom/Self-Signed Certificates
+
+For internal deployments or testing.
+
+### Generate Self-Signed Certificate
+
+```bash
+openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
+  -keyout /etc/ssl/private/sparklytics-selfsigned.key \
+  -out /etc/ssl/certs/sparklytics-selfsigned.crt \
+  -subj "/CN=analytics.internal.company.com"
+```
+
+### Use with Nginx
+
+```nginx
+ssl_certificate /etc/ssl/certs/sparklytics-selfsigned.crt;
+ssl_certificate_key /etc/ssl/private/sparklytics-selfsigned.key;
+```
+
+<Warning>
+  Browsers will show security warnings for self-signed certificates. Only use for internal/testing environments.
+</Warning>
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Let's Encrypt rate limit exceeded">
+    **Error:** `too many certificates already issued`
+
+    **Solution:**
+    - Wait one week for rate limit reset
+    - Use staging environment for testing: `certbot --staging`
+    - Let's Encrypt allows 50 certs per domain per week
+  </Accordion>
+
+  <Accordion title="DNS validation fails">
+    **Error:** `DNS problem: NXDOMAIN`
+
+    **Solution:**
+    - Verify DNS is configured: `dig analytics.example.com`
+    - Wait for DNS propagation (up to 48 hours)
+    - Ensure no conflicting DNS records
+  </Accordion>
+
+  <Accordion title="Port 80 or 443 already in use">
+    **Error:** `Address already in use`
+
+    **Solution:**
+    ```bash
+    # Find what's using the port
+    sudo lsof -i :80
+    sudo lsof -i :443
+
+    # Stop conflicting service
+    sudo systemctl stop apache2  # or other service
+    ```
+  </Accordion>
+
+  <Accordion title="Certificate not trusted on clients">
+    **Cause:** Missing intermediate certificates.
+
+    **Solution:**
+    - Ensure using `fullchain.pem` not `cert.pem`
+    - Caddy handles this automatically
+    - For Nginx: `ssl_certificate /etc/letsencrypt/live/domain/fullchain.pem;`
+  </Accordion>
+</AccordionGroup>
+
+## Sparklytics HTTPS Configuration
+
+After setting up HTTPS at the reverse proxy level:
+
+<Steps>
+  <Step title="Enable HTTPS mode">
+    Ensure this is set in your `docker-compose.yml` or environment:
+
+    ```yaml
+    environment:
+      - SPARKLYTICS_HTTPS=true
+    ```
+  </Step>
+
+  <Step title="Configure CORS (if needed)">
+    If your tracked websites are on different domains:
+
+    ```yaml
+    environment:
+      - SPARKLYTICS_CORS_ORIGINS=https://yoursite.com,https://www.yoursite.com
+    ```
+  </Step>
+
+  <Step title="Restart Sparklytics">
+    ```bash
+    docker compose restart sparklytics
+    ```
+  </Step>
+
+  <Step title="Update tracking snippet">
+    Change the script URL to HTTPS:
+
+    ```html
+    <script defer src="https://analytics.yourdomain.com/s.js" 
+            data-website-id="YOUR_WEBSITE_ID"></script>
+    ```
+  </Step>
+</Steps>
+
+## Testing Your HTTPS Setup
+
+<Steps>
+  <Step title="SSL Labs test">
+    Comprehensive SSL/TLS analysis:
+
+    https://www.ssllabs.com/ssltest/analyze.html?d=analytics.yourdomain.com
+
+    Aim for an **A** or **A+** rating.
+  </Step>
+
+  <Step title="Security headers check">
+    https://securityheaders.com/?q=https://analytics.yourdomain.com
+
+    Should show HSTS and other security headers.
+  </Step>
+
+  <Step title="Browser test">
+    - Visit your dashboard over HTTPS
+    - Check for padlock icon (no warnings)
+    - Verify login works correctly
+    - Send test pageview from HTTPS page
+  </Step>
+</Steps>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Reverse Proxy Setup" icon="server" href="/self-hosting/reverse-proxy">
+    Complete reverse proxy configurations
+  </Card>
+  <Card title="Performance Tuning" icon="gauge-high" href="/self-hosting/performance-tuning">
+    Optimize for production workloads
+  </Card>
+</CardGroup>

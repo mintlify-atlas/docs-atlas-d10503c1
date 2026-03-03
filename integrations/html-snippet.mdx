@@ -1,0 +1,231 @@
+---
+title: "HTML/JavaScript Snippet"
+description: "Track pageviews and custom events on any website with a lightweight script"
+---
+
+The HTML snippet is the simplest way to add Sparklytics to any website. The script is **less than 5 KB gzipped**, works without cookies, and automatically tracks pageviews and SPA navigation.
+
+## Installation
+
+<Steps>
+  <Step title="Get your website ID">
+    In the Sparklytics dashboard, create a new website and copy the **Website ID**.
+  </Step>
+
+  <Step title="Add the script tag">
+    Add the following script before the closing `</body>` tag on every page:
+
+    ```html
+    <script defer src="https://analytics.example.com/s.js" data-website-id="YOUR_WEBSITE_ID"></script>
+    ```
+
+    Replace `https://analytics.example.com` with your Sparklytics server URL.
+  </Step>
+
+  <Step title="Verify tracking">
+    Visit your website and check the Sparklytics dashboard. Pageviews should appear within seconds.
+  </Step>
+</Steps>
+
+## Configuration Options
+
+Customize the script behavior using `data-*` attributes:
+
+<CodeGroup>
+```html Self-hosted (custom domain)
+<script 
+  defer 
+  src="https://analytics.example.com/s.js" 
+  data-website-id="abc123"
+></script>
+```
+
+```html Exclude hash changes
+<script 
+  defer 
+  src="https://analytics.example.com/s.js" 
+  data-website-id="abc123"
+  data-exclude-hash="true"
+></script>
+```
+
+```html Track outbound links
+<script 
+  defer 
+  src="https://analytics.example.com/s.js" 
+  data-website-id="abc123"
+  data-track-links="outbound"
+></script>
+```
+
+```html Track scroll depth
+<script 
+  defer 
+  src="https://analytics.example.com/s.js" 
+  data-website-id="abc123"
+  data-track-scroll-depth="true"
+></script>
+```
+</CodeGroup>
+
+### Available Attributes
+
+| Attribute | Values | Description |
+|-----------|--------|-------------|
+| `data-website-id` | **Required** | Your website ID from the dashboard |
+| `data-api-host` | URL | Override API endpoint (default: same origin) |
+| `data-exclude-hash` | `"true"` | Skip tracking hash-only URL changes |
+| `data-respect-dnt` | `"false"` | Ignore DNT/GPC signals (default: respects them) |
+| `data-disabled` | `"true"` | Disable tracking (useful for dev/staging) |
+| `data-track-links` | `"true"` / `"outbound"` | Track all links or external links only |
+| `data-track-scroll-depth` | `"true"` / `"25,50,75,100"` | Track scroll milestones |
+| `data-track-forms` | `"true"` | Track form submissions |
+
+## Tracking Custom Events
+
+Use the global `window.sparklytics` API to track custom events:
+
+```javascript
+// Track a button click
+window.sparklytics?.track('signup_click', { 
+  plan: 'pro',
+  source: 'hero_cta' 
+})
+
+// Track a purchase
+window.sparklytics?.track('purchase', {
+  product_id: '12345',
+  price: 49.99,
+  currency: 'USD'
+})
+
+// Track without additional data
+window.sparklytics?.track('newsletter_signup')
+```
+
+<Warning>
+  Event names are limited to **50 characters** and event data must be **less than 4 KB** when serialized to JSON.
+</Warning>
+
+## Visitor Identification
+
+By default, Sparklytics generates a privacy-friendly visitor ID based on IP + user agent (rotated daily). You can override this with a stable identifier:
+
+<Tabs>
+  <Tab title="Identify a visitor">
+    ```javascript
+    // After user logs in
+    window.sparklytics?.identify('user-123')
+    ```
+  </Tab>
+
+  <Tab title="Reset identification">
+    ```javascript
+    // After user logs out
+    window.sparklytics?.reset()
+    ```
+  </Tab>
+</Tabs>
+
+<Note>
+  Custom visitor IDs are stored in `localStorage` under the key `sparklytics_visitor_id` and persist across sessions. Maximum length: **64 characters**.
+</Note>
+
+## UTM Parameter Tracking
+
+The snippet automatically captures and persists UTM parameters from the URL:
+
+- `utm_source`
+- `utm_medium`
+- `utm_campaign`
+- `utm_term`
+- `utm_content`
+
+UTM values are stored in `sessionStorage` and attached to all events in the same session.
+
+## SPA Support
+
+The script automatically tracks navigation in single-page applications by:
+
+1. Intercepting `history.pushState` and `history.replaceState`
+2. Listening to `popstate` events
+3. Sending a new pageview when the URL changes
+
+<Tip>
+  Works out-of-the-box with React Router, Vue Router, Next.js Pages Router, and other client-side routing libraries.
+</Tip>
+
+## Privacy Features
+
+### Do Not Track (DNT) Respect
+
+By default, the script respects browser privacy signals:
+
+- `navigator.doNotTrack === '1'`
+- `navigator.globalPrivacyControl === true`
+
+To disable this behavior (not recommended):
+
+```html
+<script 
+  defer 
+  src="https://analytics.example.com/s.js" 
+  data-website-id="abc123"
+  data-respect-dnt="false"
+></script>
+```
+
+### No Cookies
+
+Sparklytics **never sets cookies**. All tracking is cookieless and does not require consent banners in most jurisdictions.
+
+## Example: Complete Setup
+
+Here's a production-ready configuration with all features enabled:
+
+```html
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>My Website</title>
+</head>
+<body>
+  <h1>Welcome</h1>
+  <button onclick="handleSignup()">Sign Up</button>
+
+  <script 
+    defer 
+    src="https://analytics.example.com/s.js" 
+    data-website-id="abc123"
+    data-track-links="outbound"
+    data-track-scroll-depth="25,50,75,100"
+    data-track-forms="true"
+  ></script>
+
+  <script>
+    function handleSignup() {
+      // Track custom event
+      window.sparklytics?.track('signup_click', { 
+        plan: 'free',
+        button_location: 'hero' 
+      })
+
+      // ... your signup logic
+    }
+  </script>
+</body>
+</html>
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Next.js SDK" icon="react" href="/integrations/nextjs-sdk">
+    First-class integration for Next.js with automatic route tracking
+  </Card>
+
+  <Card title="Custom Integration" icon="code" href="/integrations/custom-integration">
+    Build a custom integration using the API directly
+  </Card>
+</CardGroup>

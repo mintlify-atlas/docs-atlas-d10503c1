@@ -1,0 +1,597 @@
+---
+title: Authentication
+description: Authentication methods, API keys, JWT tokens, and session management
+---
+
+## Authentication Methods
+
+Sparklytics supports multiple authentication modes for different deployment scenarios.
+
+### Auth Modes
+
+Configure via `SPARKLYTICS_AUTH` environment variable:
+
+<ParamField path="SPARKLYTICS_AUTH" type="string" default="local">
+  Authentication mode: `none`, `password`, or `local`
+</ParamField>
+
+#### Local Mode (Recommended)
+
+**First-run experience:**
+1. Navigate to dashboard → redirected to `/setup`
+2. Create admin password (one-time)
+3. Login with password
+
+**Features:**
+- Admin password stored as Argon2id hash in database
+- Password change endpoint available
+- Session cookie authentication
+- API key generation
+
+**Configuration:**
+
+```bash
+SPARKLYTICS_AUTH=local
+SPARKLYTICS_SESSION_DAYS=7  # JWT cookie lifetime (1-30 days)
+```
+
+#### Password Mode
+
+Single shared password for all users, configured via environment variable.
+
+**Features:**
+- No first-run setup page
+- Password cannot be changed via API (env-only)
+- Session cookie authentication
+- API key generation
+
+**Configuration:**
+
+```bash
+SPARKLYTICS_AUTH=password
+SPARKLYTICS_PASSWORD=your-secure-password
+SPARKLYTICS_SESSION_DAYS=7
+```
+
+#### None Mode
+
+No authentication required (development/private networks only).
+
+**Features:**
+- Dashboard accessible without login
+- Auth endpoints return `404 Not Found`
+- No API keys
+
+**Configuration:**
+
+```bash
+SPARKLYTICS_AUTH=none
+```
+
+<Warning>
+  **Never use `none` mode in production.** Your analytics data will be publicly accessible.
+</Warning>
+
+## Session Authentication
+
+### Login Flow
+
+**Request:**
+
+```bash
+curl -X POST https://analytics.example.com/api/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{
+    "password": "your-password"
+  }'
+```
+
+**Response (200 OK):**
+
+```json
+{
+  "data": {
+    "expires_at": "2026-03-10T12:00:00Z"
+  }
+}
+```
+
+**Cookie set:**
+
+```http
+Set-Cookie: spk_session=eyJhbGc...; HttpOnly; SameSite=Strict; Path=/; Max-Age=604800; Secure
+```
+
+### Cookie Details
+
+<ParamField path="spk_session" type="string">
+  JWT token containing session claims
+</ParamField>
+
+**Cookie attributes:**
+- `HttpOnly` - Prevents JavaScript access (XSS protection)
+- `SameSite=Strict` - CSRF protection
+- `Path=/` - Valid for all endpoints
+- `Max-Age` - Calculated from `SPARKLYTICS_SESSION_DAYS` (default: 7 days = 604,800 seconds)
+- `Secure` - Only sent over HTTPS (controlled by `SPARKLYTICS_HTTPS`, defaults to `true`)
+
+<Warning>
+  Set `SPARKLYTICS_HTTPS=false` only for local development on plain HTTP. Production deployments must use HTTPS.
+</Warning>
+
+### JWT Token Structure
+
+**Claims:**
+
+```json
+{
+  "sub": "admin",
+  "exp": 1709211600,
+  "iat": 1708606800
+}
+```
+
+<ParamField path="sub" type="string">
+  Subject (always `admin` in self-hosted mode)
+</ParamField>
+
+<ParamField path="exp" type="number">
+  Expiration timestamp (Unix seconds)
+</ParamField>
+
+<ParamField path="iat" type="number">
+  Issued-at timestamp (Unix seconds)
+</ParamField>
+
+**Signing:**
+- Algorithm: **HS256** (HMAC with SHA-256)
+- Secret: 64-character hex string (auto-generated, stored in database)
+- Secret rotation: automatic on password change (invalidates all sessions)
+
+### Session Management
+
+#### Check Authentication Status
+
+```bash
+curl https://analytics.example.com/api/auth/status
+```
+
+**Response:**
+
+```json
+{
+  "mode": "local",
+  "setup_required": false,
+  "authenticated": true
+}
+```
+
+<ResponseField name="mode" type="string">
+  Auth mode: `local` or `password` (returns 404 in `none` mode)
+</ResponseField>
+
+<ResponseField name="setup_required" type="boolean">
+  `true` if admin password not configured (local mode only)
+</ResponseField>
+
+<ResponseField name="authenticated" type="boolean">
+  `true` if valid session cookie present
+</ResponseField>
+
+#### Get Session Details
+
+```bash
+curl https://analytics.example.com/api/auth/session \
+  -H "Cookie: spk_session=eyJhbGc..."
+```
+
+**Response (200 OK):**
+
+```json
+{
+  "data": {
+    "authenticated": true,
+    "mode": "local",
+    "expires_at": "2026-03-10T12:00:00Z"
+  }
+}
+```
+
+**Error (401 Unauthorized):**
+
+```json
+{
+  "error": {
+    "code": "unauthorized",
+    "message": "Authentication required"
+  }
+}
+```
+
+#### Logout
+
+```bash
+curl -X POST https://analytics.example.com/api/auth/logout \
+  -H "Cookie: spk_session=eyJhbGc..."
+```
+
+**Response (200 OK):**
+
+```json
+{
+  "data": {
+    "ok": true
+  }
+}
+```
+
+**Cookie cleared:**
+
+```http
+Set-Cookie: spk_session=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0; Secure
+```
+
+### Rate Limiting (Login)
+
+**Protection:** 5 failed login attempts per 15 minutes per IP address
+
+**Response (429 Too Many Requests):**
+
+```json
+{
+  "error": {
+    "code": "rate_limited",
+    "message": "Too many failed login attempts"
+  }
+}
+```
+
+**Headers:**
+
+```http
+Retry-After: 900
+```
+
+Wait 900 seconds (15 minutes) before retrying.
+
+### Password Management
+
+#### Setup Password (Local Mode Only)
+
+**First-run only.** Returns `410 Gone` if already configured.
+
+```bash
+curl -X POST https://analytics.example.com/api/auth/setup \
+  -H "Content-Type: application/json" \
+  -d '{
+    "password": "your-secure-password"
+  }'
+```
+
+**Password requirements:**
+- Minimum **12 characters**
+- Must contain: uppercase, lowercase, number, special character
+
+**Response (201 Created):**
+
+```json
+{
+  "data": {
+    "ok": true
+  }
+}
+```
+
+#### Change Password (Local Mode Only)
+
+**Requires authentication.** Invalidates all existing sessions.
+
+```bash
+curl -X PUT https://analytics.example.com/api/auth/password \
+  -H "Content-Type: application/json" \
+  -H "Cookie: spk_session=eyJhbGc..." \
+  -d '{
+    "current_password": "old-password",
+    "new_password": "new-secure-password"
+  }'
+```
+
+**Response (200 OK):**
+
+```json
+{
+  "data": {
+    "ok": true
+  }
+}
+```
+
+**Side effects:**
+- JWT secret rotated (new 64-char hex string)
+- All sessions invalidated (users must re-login)
+
+#### Argon2id Parameters
+
+Password hashing uses Argon2id with configurable memory cost:
+
+```bash
+SPARKLYTICS_ARGON2_MEMORY_KB=65536  # 64 MB (default)
+```
+
+**Fixed parameters:**
+- **Time cost:** 3 iterations
+- **Parallelism:** 1 thread
+- **Output length:** 32 bytes
+
+## API Key Authentication
+
+API keys provide programmatic access to query endpoints without session cookies.
+
+### API Key Format
+
+API keys use mode-aware prefixes:
+
+#### Self-Hosted Mode
+
+```
+spk_selfhosted_a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6
+```
+
+**Structure:**
+- Prefix: `spk_selfhosted_`
+- Random part: 32 hex characters
+- Total length: 47 characters
+
+#### Cloud Mode
+
+```
+spk_live_a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6
+```
+
+**Structure:**
+- Prefix: `spk_live_`
+- Random part: 32 hex characters
+- Total length: 40 characters
+
+### Storage
+
+API keys are hashed before storage:
+
+- **Hash algorithm:** SHA-256
+- **Stored fields:**
+  - `key_hash` - Full SHA-256 hash (64 hex chars)
+  - `key_prefix` - First 20 characters of raw key (for display)
+  - `name` - User-provided label
+  - `created_at` - Timestamp
+
+<Warning>
+  **The raw API key is shown only once** during creation. Store it securely — you cannot retrieve it later.
+</Warning>
+
+### Create API Key
+
+**Requires session authentication.**
+
+```bash
+curl -X POST https://analytics.example.com/api/auth/keys \
+  -H "Content-Type: application/json" \
+  -H "Cookie: spk_session=eyJhbGc..." \
+  -d '{
+    "name": "Production Server"
+  }'
+```
+
+**Response (201 Created):**
+
+```json
+{
+  "data": {
+    "id": "key_a1b2c3d4e5",
+    "name": "Production Server",
+    "key": "spk_selfhosted_a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6",
+    "prefix": "spk_selfhosted_a1b2",
+    "created_at": "2026-03-03T12:00:00Z"
+  }
+}
+```
+
+<ResponseField name="id" type="string">
+  Key identifier (format: `key_` + 10 alphanumeric chars)
+</ResponseField>
+
+<ResponseField name="key" type="string">
+  **Full API key** - Save this immediately, you cannot retrieve it later
+</ResponseField>
+
+<ResponseField name="prefix" type="string">
+  Display-safe prefix (first 20 characters)
+</ResponseField>
+
+### List API Keys
+
+**Requires session authentication.**
+
+```bash
+curl "https://analytics.example.com/api/auth/keys?limit=20&offset=0" \
+  -H "Cookie: spk_session=eyJhbGc..."
+```
+
+**Response (200 OK):**
+
+```json
+{
+  "data": [
+    {
+      "id": "key_a1b2c3d4e5",
+      "name": "Production Server",
+      "prefix": "spk_selfhosted_a1b2",
+      "created_at": "2026-03-03T12:00:00Z"
+    }
+  ],
+  "pagination": {
+    "total": 1,
+    "limit": 20,
+    "offset": 0,
+    "has_more": false
+  }
+}
+```
+
+<ParamField query="limit" type="number" default="20">
+  Number of keys to return (1-100)
+</ParamField>
+
+<ParamField query="offset" type="number" default="0">
+  Pagination offset
+</ParamField>
+
+### Revoke API Key
+
+**Requires session authentication.**
+
+```bash
+curl -X DELETE https://analytics.example.com/api/auth/keys/key_a1b2c3d4e5 \
+  -H "Cookie: spk_session=eyJhbGc..."
+```
+
+**Response (204 No Content)**
+
+No response body. Key is permanently deleted.
+
+**Error (404 Not Found):**
+
+```json
+{
+  "error": {
+    "code": "not_found",
+    "message": "API key not found"
+  }
+}
+```
+
+### Using API Keys
+
+Send API keys in the `Authorization` header with `Bearer` scheme:
+
+```bash
+curl https://analytics.example.com/api/websites/site_abc123/stats \
+  -H "Authorization: Bearer spk_selfhosted_a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6"
+```
+
+**Supported endpoints:**
+- `GET /api/websites` - List websites
+- `GET /api/websites/:id/stats` - Website statistics
+- `GET /api/websites/:id/pageviews` - Pageview breakdown
+- `GET /api/websites/:id/events` - Event log
+- All other query endpoints (sessions, funnels, retention, etc.)
+
+**Not supported:**
+- Event collection (`POST /api/collect` is unauthenticated)
+- Auth management endpoints (require session cookies)
+- Website creation/deletion (require session cookies)
+
+## Event Collection (Unauthenticated)
+
+The `POST /api/collect` endpoint **does not require authentication**.
+
+**Why?**
+- Client-side JavaScript must be able to send events
+- CORS restrictions prevent cookie-based auth from all origins
+- Rate limiting (60 req/min per IP) prevents abuse
+
+**Validation:**
+- Unknown `website_id` values are rejected with `404 Not Found`
+- Events for deleted websites are rejected
+
+**Example:**
+
+```bash
+curl -X POST https://analytics.example.com/api/collect \
+  -H "Content-Type: application/json" \
+  -d '{
+    "website_id": "site_abc123",
+    "event_type": "pageview",
+    "url": "https://example.com/pricing"
+  }'
+```
+
+**Response (202 Accepted):**
+
+```json
+{
+  "ok": true
+}
+```
+
+See [API Overview](/api/overview) for full event schema and enrichment details.
+
+## Security Best Practices
+
+### HTTPS Only (Production)
+
+**Always deploy with HTTPS in production:**
+
+```bash
+SPARKLYTICS_HTTPS=true  # Default
+```
+
+This enables the `Secure` cookie flag, preventing session cookies from being sent over plain HTTP.
+
+**Local development only:**
+
+```bash
+SPARKLYTICS_HTTPS=false  # Disables Secure flag for localhost
+```
+
+### Reverse Proxy Recommendations
+
+When deploying behind a reverse proxy (Nginx, Caddy, Traefik):
+
+1. **Terminate TLS at the proxy** (use automatic certificates with Caddy)
+2. **Configure trusted proxies:**
+
+```bash
+SPARKLYTICS_TRUSTED_PROXIES=10.0.0.0/8,172.16.0.0/12
+```
+
+3. **Ensure proxy forwards client IP:**
+
+```nginx
+proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+```
+
+See [Reverse Proxy Setup](https://github.com/Sparklytics/sparklytics/blob/main/docs/reverse-proxy.md) for full configuration.
+
+### API Key Rotation
+
+**Best practices:**
+- Rotate API keys every 90 days
+- Use separate keys for different environments (production, staging)
+- Revoke compromised keys immediately
+- Store keys in environment variables or secrets manager (never commit to git)
+
+### Password Requirements
+
+**Enforced in local mode setup:**
+- Minimum 12 characters
+- At least one uppercase letter
+- At least one lowercase letter
+- At least one number
+- At least one special character
+
+**Recommendation:** Use a password manager to generate strong passwords (16+ characters).
+
+## Multi-Tenancy (Cloud Mode)
+
+Cloud deployments use Clerk for authentication:
+
+- **Organizations** map to `tenant_id`
+- **Org-scoped JWT claims** enforce data isolation
+- **PostgreSQL** stores user/org metadata
+- **ClickHouse** analytics tables include `tenant_id` column
+
+See [Cloud Deployment Guide](https://github.com/Sparklytics/sparklytics-cloud) (private repo) for details.
+
+<Note>
+  Self-hosted mode **always** stores `tenant_id` as `NULL` (single-tenant).
+</Note>

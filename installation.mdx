@@ -1,0 +1,508 @@
+---
+title: Installation
+description: Detailed installation guides for Docker, docker-compose, and binary deployments of Sparklytics
+---
+
+## Choose your deployment method
+
+Sparklytics supports multiple installation methods to fit your infrastructure.
+
+<CardGroup cols={3}>
+  <Card title="Docker Compose" icon="docker">
+    **Recommended** for most users — persistent volumes and easy configuration
+  </Card>
+  <Card title="Docker Run" icon="container-storage">
+    Quick single-container deployment for testing
+  </Card>
+  <Card title="Binary" icon="file-binary">
+    Direct execution — no container runtime required
+  </Card>
+</CardGroup>
+
+## Docker Compose (Recommended)
+
+The easiest way to deploy Sparklytics with persistent data storage.
+
+<Steps>
+  <Step title="Download docker-compose.yml">
+    ```bash
+    curl -O https://raw.githubusercontent.com/Sparklytics/sparklytics/main/docker-compose.yml
+    ```
+
+    The default configuration:
+    ```yaml docker-compose.yml
+    version: '3.8'
+    services:
+      sparklytics:
+        image: sparklytics/sparklytics:latest
+        ports:
+          - "3000:3000"
+        volumes:
+          - sparklytics-data:/data
+        environment:
+          - SPARKLYTICS_AUTH=local
+          - SPARKLYTICS_HTTPS=true
+          - SPARKLYTICS_DUCKDB_MEMORY=1GB
+        restart: unless-stopped
+
+    volumes:
+      sparklytics-data:
+    ```
+  </Step>
+
+  <Step title="Configure environment variables">
+    Edit `docker-compose.yml` to customize your deployment:
+
+    <CodeGroup>
+    ```yaml Local Development
+    environment:
+      - SPARKLYTICS_AUTH=local
+      - SPARKLYTICS_HTTPS=false  # Plain HTTP for localhost
+      - SPARKLYTICS_DUCKDB_MEMORY=1GB
+    ```
+
+    ```yaml Production with Password
+    environment:
+      - SPARKLYTICS_AUTH=password
+      - SPARKLYTICS_PASSWORD=your-strong-password-here
+      - SPARKLYTICS_HTTPS=true
+      - SPARKLYTICS_DUCKDB_MEMORY=2GB  # Higher for busy sites
+    ```
+
+    ```yaml Open Mode (No Auth)
+    environment:
+      - SPARKLYTICS_AUTH=none
+      - SPARKLYTICS_DUCKDB_MEMORY=1GB
+    ```
+    </CodeGroup>
+
+    <Warning>
+    **IMPORTANT:** Set `SPARKLYTICS_HTTPS=false` only when testing on plain `http://localhost`. For production deployments behind HTTPS, keep it `true` or the browser will reject authentication cookies.
+    </Warning>
+  </Step>
+
+  <Step title="Start the service">
+    ```bash
+    docker compose up -d
+    ```
+
+    Verify it's running:
+    ```bash
+    docker compose ps
+    docker compose logs -f
+    ```
+
+    Open `http://localhost:3000` to complete setup.
+  </Step>
+</Steps>
+
+### Docker Compose with Caddy (HTTPS)
+
+For production deployments with automatic TLS certificates:
+
+```bash
+curl -O https://raw.githubusercontent.com/Sparklytics/sparklytics/main/docker-compose.caddy.yml
+```
+
+Edit the `Caddyfile` and replace `analytics.example.com` with your domain:
+
+```caddyfile Caddyfile
+analytics.yourdomain.com {
+  reverse_proxy sparklytics:3000
+}
+```
+
+Start with Caddy:
+```bash
+docker compose -f docker-compose.caddy.yml up -d
+```
+
+Caddy automatically obtains and renews Let's Encrypt certificates — no manual certbot setup required.
+
+<Info>
+For Nginx or Traefik reverse proxy configurations, see [docs/reverse-proxy.md](https://github.com/Sparklytics/sparklytics/blob/main/docs/reverse-proxy.md).
+</Info>
+
+## Docker Run
+
+Deploy a single container with persistent storage.
+
+### Local Auth (Recommended)
+
+```bash
+docker run -d \
+  --name sparklytics \
+  -p 3000:3000 \
+  -v sparklytics-data:/data \
+  -e SPARKLYTICS_AUTH=local \
+  -e SPARKLYTICS_HTTPS=false \
+  -e SPARKLYTICS_DUCKDB_MEMORY=1GB \
+  sparklytics/sparklytics:latest
+```
+
+### Password Auth
+
+```bash
+docker run -d \
+  --name sparklytics \
+  -p 3000:3000 \
+  -v sparklytics-data:/data \
+  -e SPARKLYTICS_AUTH=password \
+  -e SPARKLYTICS_PASSWORD='your-strong-password' \
+  -e SPARKLYTICS_HTTPS=false \
+  -e SPARKLYTICS_DUCKDB_MEMORY=1GB \
+  sparklytics/sparklytics:latest
+```
+
+<Warning>
+In `password` mode, `SPARKLYTICS_PASSWORD` is **required** — the container will fail to start without it.
+</Warning>
+
+### Open Mode (No Authentication)
+
+```bash
+docker run -d \
+  --name sparklytics \
+  -p 3000:3000 \
+  -v sparklytics-data:/data \
+  -e SPARKLYTICS_AUTH=none \
+  -e SPARKLYTICS_DUCKDB_MEMORY=1GB \
+  sparklytics/sparklytics:latest
+```
+
+<Warning>
+**Security risk:** Open mode allows anyone to access your analytics dashboard. Only use this for local development or when Sparklytics is behind a trusted network firewall.
+</Warning>
+
+### View logs
+
+```bash
+docker logs -f sparklytics
+```
+
+### Stop and remove
+
+```bash
+docker stop sparklytics
+docker rm sparklytics
+```
+
+<Note>
+The named volume `sparklytics-data` persists your analytics data even after removing the container. To delete all data: `docker volume rm sparklytics-data`.
+</Note>
+
+## Binary Installation
+
+Run Sparklytics directly without Docker.
+
+<Steps>
+  <Step title="Download the binary">
+    Download the latest release for your platform from [GitHub Releases](https://github.com/Sparklytics/sparklytics/releases):
+
+    ```bash
+    # Linux AMD64
+    curl -LO https://github.com/Sparklytics/sparklytics/releases/latest/download/sparklytics-linux-amd64
+    chmod +x sparklytics-linux-amd64
+    mv sparklytics-linux-amd64 sparklytics
+    ```
+
+    <CodeGroup>
+    ```bash Linux ARM64
+    curl -LO https://github.com/Sparklytics/sparklytics/releases/latest/download/sparklytics-linux-arm64
+    chmod +x sparklytics-linux-arm64
+    mv sparklytics-linux-arm64 sparklytics
+    ```
+
+    ```bash macOS ARM64
+    curl -LO https://github.com/Sparklytics/sparklytics/releases/latest/download/sparklytics-darwin-arm64
+    chmod +x sparklytics-darwin-arm64
+    mv sparklytics-darwin-arm64 sparklytics
+    ```
+    </CodeGroup>
+  </Step>
+
+  <Step title="Download GeoIP database">
+    Sparklytics uses a GeoIP database for country/city analytics. Docker images bundle this automatically, but binary installations need it downloaded manually.
+
+    ```bash
+    # Download DB-IP City Lite database
+    curl -O https://download.db-ip.com/free/dbip-city-lite-$(date +%Y-%m).mmdb.gz
+    gunzip dbip-city-lite-*.mmdb.gz
+    mv dbip-city-lite-*.mmdb dbip-city-lite.mmdb
+    ```
+
+    <Info>
+    You can also use MaxMind GeoLite2-City.mmdb — just point `SPARKLYTICS_GEOIP_PATH` at it.
+    </Info>
+  </Step>
+
+  <Step title="Create data directory">
+    ```bash
+    mkdir -p ./data
+    ```
+  </Step>
+
+  <Step title="Run Sparklytics">
+    ```bash
+    SPARKLYTICS_DATA_DIR=./data \
+    SPARKLYTICS_AUTH=local \
+    SPARKLYTICS_HTTPS=false \
+    SPARKLYTICS_DUCKDB_MEMORY=1GB \
+    SPARKLYTICS_GEOIP_PATH=./dbip-city-lite.mmdb \
+    ./sparklytics
+    ```
+
+    The dashboard is embedded in the binary — no separate web server needed.
+  </Step>
+
+  <Step title="Verify it's running">
+    ```bash
+    curl http://localhost:3000/health
+    ```
+
+    Expect:
+    ```json
+    {"status":"ok"}
+    ```
+  </Step>
+</Steps>
+
+### Run as a systemd service
+
+For production deployments, run Sparklytics as a systemd service:
+
+```ini /etc/systemd/system/sparklytics.service
+[Unit]
+Description=Sparklytics Analytics
+After=network.target
+
+[Service]
+Type=simple
+User=sparklytics
+WorkingDirectory=/opt/sparklytics
+Environment="SPARKLYTICS_DATA_DIR=/opt/sparklytics/data"
+Environment="SPARKLYTICS_AUTH=local"
+Environment="SPARKLYTICS_HTTPS=true"
+Environment="SPARKLYTICS_DUCKDB_MEMORY=2GB"
+Environment="SPARKLYTICS_GEOIP_PATH=/opt/sparklytics/dbip-city-lite.mmdb"
+ExecStart=/opt/sparklytics/sparklytics
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
+```
+
+Enable and start:
+```bash
+sudo systemctl daemon-reload
+sudo systemctl enable sparklytics
+sudo systemctl start sparklytics
+sudo systemctl status sparklytics
+```
+
+## Environment Variables Reference
+
+### Authentication
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `SPARKLYTICS_AUTH` | `local` | Auth mode: `local` (one-time setup), `password` (env password), or `none` (no auth) |
+| `SPARKLYTICS_PASSWORD` | — | **Required** when `SPARKLYTICS_AUTH=password` |
+| `SPARKLYTICS_SESSION_DAYS` | `7` | JWT session expiry in days (1–30) |
+
+### Network
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `SPARKLYTICS_PORT` | `3000` | HTTP listen port |
+| `SPARKLYTICS_HTTPS` | `true` | Set `false` **only** for plain HTTP (localhost/dev). Keep `true` for HTTPS deployments or cookies will be rejected. |
+| `SPARKLYTICS_CORS_ORIGINS` | — | Comma-separated allowed origins for analytics API (e.g., `https://yoursite.com,https://www.yoursite.com`) |
+
+### Storage
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `SPARKLYTICS_DATA_DIR` | `./data` | DuckDB data directory |
+| `SPARKLYTICS_DUCKDB_MEMORY` | `1GB` | Query memory limit. Raise to `2GB`–`8GB` on larger VPS for better query performance. |
+| `SPARKLYTICS_RETENTION_DAYS` | `365` | How long to keep raw events (days) |
+| `SPARKLYTICS_GEOIP_PATH` | `./GeoLite2-City.mmdb` | Path to GeoIP MMDB file. Docker images use bundled `/geoip/dbip-city-lite.mmdb`. |
+
+### Security
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `SPARKLYTICS_ARGON2_MEMORY_KB` | `65536` | Argon2id memory cost in KB (64 MB). Only used in `local` auth mode. |
+
+## Authentication Modes
+
+### Local Mode (`local`, recommended)
+
+One-time setup page on first run:
+
+1. Visit `http://localhost:3000`
+2. Redirected to `/setup`
+3. Create admin password (min 12 characters)
+4. Log in with the new password
+
+**Best for:** Most self-hosted production deployments.
+
+### Password Mode (`password`)
+
+Login with a password set via environment variable:
+
+1. Set `SPARKLYTICS_PASSWORD` in your deployment config
+2. Visit `http://localhost:3000`
+3. Redirected to `/login`
+4. Enter the password from `SPARKLYTICS_PASSWORD`
+
+**Best for:** Simple single-password deployments where env vars are secure.
+
+<Warning>
+`SPARKLYTICS_PASSWORD` is **required** in password mode — the service will fail to start without it.
+</Warning>
+
+### Open Mode (`none`)
+
+No authentication — dashboard opens directly:
+
+1. Visit `http://localhost:3000`
+2. Dashboard loads immediately
+3. No login or setup screens
+
+**Best for:** Local development or deployments behind a trusted network firewall.
+
+<Warning>
+**Security risk:** Anyone who can reach your Sparklytics server can view and modify analytics data. Only use this mode when Sparklytics is not publicly accessible.
+</Warning>
+
+## Upgrading
+
+### Docker Compose
+
+```bash
+docker compose pull
+docker compose up -d
+```
+
+Your data persists in the named volume across upgrades.
+
+### Docker Run
+
+```bash
+docker pull sparklytics/sparklytics:latest
+docker stop sparklytics
+docker rm sparklytics
+# Run the updated container (same command as initial deployment)
+```
+
+### Binary
+
+Download the latest release and replace the binary:
+
+```bash
+curl -LO https://github.com/Sparklytics/sparklytics/releases/latest/download/sparklytics-linux-amd64
+chmod +x sparklytics-linux-amd64
+sudo systemctl stop sparklytics
+sudo mv sparklytics-linux-amd64 /opt/sparklytics/sparklytics
+sudo systemctl start sparklytics
+```
+
+## Data Persistence
+
+### Docker volumes
+
+Sparklytics stores all data in `/data` inside the container. The `docker-compose.yml` mounts a named volume:
+
+```yaml
+volumes:
+  - sparklytics-data:/data
+```
+
+This persists across container restarts and upgrades.
+
+**Backup your data:**
+```bash
+docker run --rm -v sparklytics-data:/data -v $(pwd):/backup ubuntu tar czf /backup/sparklytics-backup.tar.gz /data
+```
+
+**Restore from backup:**
+```bash
+docker run --rm -v sparklytics-data:/data -v $(pwd):/backup ubuntu tar xzf /backup/sparklytics-backup.tar.gz -C /
+```
+
+### Binary installations
+
+Set `SPARKLYTICS_DATA_DIR` to a persistent directory:
+
+```bash
+SPARKLYTICS_DATA_DIR=/opt/sparklytics/data ./sparklytics
+```
+
+**Backup:**
+```bash
+tar czf sparklytics-backup.tar.gz /opt/sparklytics/data
+```
+
+## Troubleshooting
+
+### Container fails to start
+
+**Check logs:**
+```bash
+docker compose logs
+```
+
+Common issues:
+- Missing `SPARKLYTICS_PASSWORD` in `password` mode
+- Port 3000 already in use
+- Permission errors on data volume
+
+### Binary fails with "file not found"
+
+Linux binaries are statically linked with musl. Ensure you downloaded the correct architecture:
+
+```bash
+uname -m  # Should match: x86_64 = amd64, aarch64 = arm64
+```
+
+### GeoIP not working
+
+Verify the GeoIP database exists:
+
+```bash
+# Docker
+docker exec sparklytics ls -lh /geoip/dbip-city-lite.mmdb
+
+# Binary
+ls -lh ./dbip-city-lite.mmdb
+```
+
+If missing, download it manually (see Binary Installation step 2).
+
+### Data disappears after restart
+
+**Docker:** You didn't mount a persistent volume.
+
+**Fix:** Add `-v sparklytics-data:/data` to your `docker run` command or use docker-compose.
+
+**Binary:** `SPARKLYTICS_DATA_DIR` points to a temporary directory.
+
+**Fix:** Set an absolute path like `/opt/sparklytics/data`.
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Quick Start" icon="rocket" href="/quickstart">
+    Track your first event and verify data collection
+  </Card>
+  <Card title="Enable HTTPS" icon="lock" href="/self-hosting/https-setup">
+    Secure your analytics dashboard with automatic TLS
+  </Card>
+  <Card title="Tracking Script" icon="code" href="/integrations/html-snippet">
+    Add the tracking snippet to your website
+  </Card>
+  <Card title="Environment Variables" icon="gear" href="/configuration/environment-variables">
+    Full reference for all configuration options
+  </Card>
+</CardGroup>

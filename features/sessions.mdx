@@ -1,0 +1,441 @@
+---
+title: Session Tracking
+description: Track user sessions and drill down into individual visitor journeys with detailed event timelines.
+---
+
+## Overview
+
+Sparklytics automatically groups events into sessions using a **30-minute inactivity timeout**. Sessions are computed server-side — no client-side storage or cookies required.
+
+<Frame>
+  <img src="/images/sessions-list.png" alt="Sessions list showing visitor activity" />
+</Frame>
+
+## How Sessions Work
+
+### Session Creation
+
+A new session starts when:
+
+1. A visitor's first event is tracked, OR
+2. More than 30 minutes have passed since their last event
+
+### Session Timeout
+
+From the README critical facts:
+
+> Session timeout: 30 minutes inactivity, server-side, no cookies.
+
+If a visitor returns after 30+ minutes of inactivity, a new session is created.
+
+### Session Attributes
+
+Each session captures:
+
+- **Entry page**: First pageview URL
+- **Exit page**: Last pageview URL
+- **Referrer**: Where the visitor came from
+- **Duration**: Time from first to last event
+- **Pageview count**: Number of pages viewed
+- **Event count**: Total events (pageviews + custom events)
+- **Location**: Country, region, city (from GeoIP)
+- **Device info**: Browser, OS, device type
+- **UTM parameters**: Source, medium, campaign
+
+## Listing Sessions
+
+### API Endpoint
+
+```bash
+GET /api/websites/{website_id}/sessions
+```
+
+### Query Parameters
+
+<ParamField query="start_date" type="string">
+  Start date in `YYYY-MM-DD` format (defaults to 7 days ago)
+</ParamField>
+
+<ParamField query="end_date" type="string">
+  End date in `YYYY-MM-DD` format (defaults to today)
+</ParamField>
+
+<ParamField query="limit" type="number" default="50">
+  Number of sessions per page (1-200)
+</ParamField>
+
+<ParamField query="cursor" type="string">
+  Pagination cursor from previous response
+</ParamField>
+
+### Response
+
+```json
+{
+  "data": [
+    {
+      "session_id": "ses_abc123xyz",
+      "visitor_id": "a1b2c3d4e5f6g7h8",
+      "first_seen": "2026-03-03T14:23:11Z",
+      "last_seen": "2026-03-03T14:45:32Z",
+      "duration_seconds": 1341,
+      "pageviews": 8,
+      "events": 12,
+      "entry_page": "/blog/analytics-guide",
+      "exit_page": "/pricing",
+      "referrer_domain": "google.com",
+      "country": "US",
+      "region": "California",
+      "city": "San Francisco",
+      "browser": "Chrome",
+      "browser_version": "122.0",
+      "os": "macOS",
+      "device_type": "desktop",
+      "utm_source": "newsletter",
+      "utm_medium": "email",
+      "utm_campaign": "march_promo"
+    }
+  ],
+  "pagination": {
+    "has_more": true,
+    "next_cursor": "eyJsYXN0X3NlZW4iOiIyMDI2LTAzLTAz..."
+  }
+}
+```
+
+### Pagination
+
+Sessions are returned in **reverse chronological order** (most recent first).
+
+To fetch the next page:
+
+```bash
+GET /api/websites/{website_id}/sessions?cursor={next_cursor}
+```
+
+From `crates/sparklytics-server/src/routes/sessions.rs:84`:
+
+```rust
+let backend_query = BackendSessionsQuery {
+    limit,
+    cursor: query.cursor,
+    sort: SessionSort::LastSeenDesc,
+};
+```
+
+## Session Detail
+
+Get the complete event timeline for a single session:
+
+```bash
+GET /api/websites/{website_id}/sessions/{session_id}
+```
+
+Response:
+
+```json
+{
+  "data": {
+    "session": {
+      "session_id": "ses_abc123xyz",
+      "visitor_id": "a1b2c3d4e5f6g7h8",
+      "first_seen": "2026-03-03T14:23:11Z",
+      "last_seen": "2026-03-03T14:45:32Z",
+      "duration_seconds": 1341,
+      "pageviews": 8,
+      "events": 12,
+      "entry_page": "/blog/analytics-guide",
+      "exit_page": "/pricing",
+      "referrer_domain": "google.com",
+      "country": "US",
+      "browser": "Chrome",
+      "os": "macOS",
+      "device_type": "desktop"
+    },
+    "events": [
+      {
+        "created_at": "2026-03-03T14:23:11Z",
+        "event_type": "pageview",
+        "event_name": null,
+        "url": "/blog/analytics-guide",
+        "referrer": "https://google.com/search?q=..."
+      },
+      {
+        "created_at": "2026-03-03T14:24:05Z",
+        "event_type": "pageview",
+        "event_name": null,
+        "url": "/features"
+      },
+      {
+        "created_at": "2026-03-03T14:25:33Z",
+        "event_type": "custom",
+        "event_name": "video_play",
+        "url": "/features",
+        "event_data": "{\"video_id\":\"demo-2024\"}"
+      },
+      {
+        "created_at": "2026-03-03T14:45:32Z",
+        "event_type": "pageview",
+        "event_name": null,
+        "url": "/pricing"
+      }
+    ],
+    "truncated": false
+  }
+}
+```
+
+### Event Timeline
+
+Events are returned in **chronological order** (oldest first) to show the user's journey through the session.
+
+### Truncation
+
+If a session has more than 1,000 events, the timeline is truncated:
+
+```json
+{
+  "truncated": true
+}
+```
+
+Only the first 1,000 events are returned.
+
+## Filtering Sessions
+
+Apply filters to narrow down sessions:
+
+```bash
+GET /api/websites/{website_id}/sessions?
+  filter_country=US&
+  filter_device=mobile&
+  filter_utm_source=google
+```
+
+### Available Filters
+
+- `filter_country` — ISO country code (e.g., `US`, `GB`)
+- `filter_region` — State/region name
+- `filter_city` — City name
+- `filter_browser` — Browser name (e.g., `Chrome`, `Safari`)
+- `filter_os` — Operating system (e.g., `macOS`, `Windows`, `iOS`)
+- `filter_device` — Device type: `desktop`, `mobile`, or `tablet`
+- `filter_page` — Entry page URL path
+- `filter_referrer` — Referrer domain
+- `filter_utm_source` — UTM source parameter
+- `filter_utm_medium` — UTM medium parameter
+- `filter_utm_campaign` — UTM campaign parameter
+
+## Session Metrics
+
+Aggregate session statistics are available via the stats endpoint:
+
+```bash
+GET /api/websites/{website_id}/stats?start_date=2026-02-01&end_date=2026-03-01
+```
+
+Session-related metrics:
+
+```json
+{
+  "data": {
+    "sessions": 12450,
+    "avg_duration_seconds": 183,
+    "bounce_rate": 42.3
+  }
+}
+```
+
+### Bounce Rate
+
+A session is considered a "bounce" if it contains **only one pageview**.
+
+From the CHANGELOG:
+
+> Bounce rate SQL: must use CTEs. Correlated subqueries don't work in DuckDB.
+
+Bounce rate = (sessions with 1 pageview) / (total sessions) × 100
+
+## Dashboard UI
+
+The sessions page displays summary cards and a detailed table:
+
+### Summary Cards
+
+From `dashboard/components/sessions/SessionsPage.tsx:30`:
+
+```tsx
+const summaryCards = [
+  {
+    label: 'Sessions',
+    value: stats ? formatNumber(stats.sessions) : null,
+  },
+  {
+    label: 'Avg. Duration',
+    value: stats ? formatDuration(stats.avg_duration_seconds) : null,
+  },
+  {
+    label: 'Bounce Rate',
+    value: stats ? `${stats.bounce_rate.toFixed(1)}%` : null,
+  },
+  {
+    label: 'Visitors',
+    value: stats ? formatNumber(stats.visitors) : null,
+  },
+];
+```
+
+### Sessions Table
+
+The table shows:
+
+- Entry page
+- Referrer domain
+- Location (country, city)
+- Browser and OS
+- Duration
+- Pageview count
+- Timestamp
+
+Click any row to open the **Session Detail Drawer** with the full event timeline.
+
+## Use Cases
+
+### Understand User Journeys
+
+See the exact path users take through your site:
+
+```bash
+GET /api/websites/{website_id}/sessions/{session_id}
+```
+
+Analyze:
+- Which pages lead to conversions
+- Where users drop off
+- How users navigate between features
+
+### Debug Tracking Issues
+
+Verify that events are being tracked correctly:
+
+1. Visit your site in a new incognito window
+2. Trigger some events
+3. Find your session in the dashboard
+4. Confirm all events appear in the timeline
+
+### Analyze High-Value Visitors
+
+Filter sessions by conversion events:
+
+```bash
+# Find sessions with purchases
+GET /api/websites/{website_id}/sessions?filter_page=/thank-you
+```
+
+Review these sessions to understand what drove conversions.
+
+### Support Customer Issues
+
+If a user reports a problem, find their session:
+
+```bash
+# Filter by their location and recent time
+GET /api/websites/{website_id}/sessions?
+  filter_city=Austin&
+  start_date=2026-03-03
+```
+
+Review their event timeline to reproduce the issue.
+
+## Performance
+
+Session queries are optimized for speed:
+
+### DuckDB (Self-Hosted)
+
+- **< 1M sessions**: < 100ms per query
+- **1M-10M sessions**: 200-500ms
+- **Pagination**: Cursor-based (no offset overhead)
+
+### ClickHouse (Cloud)
+
+- **< 10M sessions**: < 50ms per query
+- **100M+ sessions**: < 200ms
+- **Scales horizontally**: Add nodes for more throughput
+
+## Privacy Considerations
+
+### Visitor ID Rotation
+
+Visitor IDs change daily at midnight UTC:
+
+```
+visitor_id = sha256(salt_epoch + ip + user_agent)[0:16]
+salt_epoch = floor(unix_timestamp / 86400)
+```
+
+This means:
+- Sessions from different days cannot be linked to the same person
+- Long-term tracking is not possible
+- Privacy is preserved without cookies
+
+### No PII Storage
+
+Sessions do NOT store:
+- IP addresses (used only for hashing, then discarded)
+- Full user agents (parsed, then discarded)
+- Email addresses or user IDs
+- Any personally identifiable information
+
+## Best Practices
+
+### Set Reasonable Limits
+
+Don't fetch all sessions at once:
+
+```bash
+# Good: Use pagination
+limit=50&cursor=...
+
+# Bad: Excessive limit
+limit=200
+```
+
+### Use Filters Effectively
+
+Narrow down sessions before fetching:
+
+```bash
+# Good: Specific filter
+filter_device=mobile&filter_country=US
+
+# Bad: No filters on large dataset
+# (fetches all sessions)
+```
+
+### Cache Session Details
+
+If showing a session detail modal, cache the result:
+
+```tsx
+// React Query caches session details automatically
+const { data } = useSessionDetail(websiteId, sessionId)
+```
+
+### Monitor Bounce Rate Trends
+
+Track bounce rate over time to identify:
+- UX issues (sudden bounce rate spike)
+- Content improvements (bounce rate decrease)
+- Landing page effectiveness
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Journey Analysis" icon="route" href="/features/journey-analysis">
+    Aggregate user paths across all sessions
+  </Card>
+  <Card title="Real-time Analytics" icon="activity" href="/features/real-time-analytics">
+    Monitor active sessions in real-time
+  </Card>
+</CardGroup>

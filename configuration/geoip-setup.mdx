@@ -1,0 +1,348 @@
+---
+title: GeoIP Setup
+description: Configure geographic IP lookup for visitor location data
+---
+
+Sparklytics uses MaxMind MMDB-format databases to enrich events with geographic data (country, city, region). This guide covers installation and configuration.
+
+## Overview
+
+GeoIP enrichment is **optional**. If no database is configured:
+
+- Sparklytics continues to run normally
+- Geo fields (country, city, region) are stored as `NULL`
+- All other analytics features work unchanged
+
+<Note>
+  Docker images bundle a free DB-IP City Lite database — no setup needed for Docker users.
+</Note>
+
+## Quick Start (Docker)
+
+### Pre-Bundled Database
+
+Official Sparklytics Docker images include DB-IP City Lite at `/geoip/dbip-city-lite.mmdb`.
+
+```bash
+docker run -d \
+  --name sparklytics \
+  -p 3000:3000 \
+  -v sparklytics-data:/data \
+  -e SPARKLYTICS_GEOIP_PATH=/geoip/dbip-city-lite.mmdb \
+  sparklytics/sparklytics:latest
+```
+
+<Note>
+  The bundled database is updated monthly. To use the latest version, follow the "Bare-Metal Install" steps below and mount it as a volume.
+</Note>
+
+## Bare-Metal Install
+
+### Option 1: DB-IP City Lite (Free, Recommended)
+
+DB-IP City Lite is free, requires no registration, and is compatible with the MMDB format.
+
+<Steps>
+  <Step title="Download the database">
+    Sparklytics includes a download script:
+    
+    ```bash
+    cd /path/to/sparklytics
+    ./scripts/download-geoip.sh
+    ```
+    
+    This downloads the latest DB-IP City Lite MMDB to `./dbip-city-lite.mmdb` (~50 MB).
+    
+    <Note>
+      The script tries the current month first, falling back to the previous month if not yet published.
+    </Note>
+  </Step>
+  
+  <Step title="Set environment variable">
+    ```bash
+    export SPARKLYTICS_GEOIP_PATH=./dbip-city-lite.mmdb
+    ```
+    
+    Or add to your `.env` file:
+    
+    ```bash
+    SPARKLYTICS_GEOIP_PATH=/var/lib/sparklytics/dbip-city-lite.mmdb
+    ```
+  </Step>
+  
+  <Step title="Start Sparklytics">
+    ```bash
+    SPARKLYTICS_DATA_DIR=./data \
+    SPARKLYTICS_GEOIP_PATH=./dbip-city-lite.mmdb \
+    ./sparklytics
+    ```
+    
+    Check logs for confirmation:
+    
+    ```
+    [INFO] GeoIP database loaded: ./dbip-city-lite.mmdb
+    ```
+  </Step>
+</Steps>
+
+#### Attribution Requirement
+
+<Warning>
+  DB-IP City Lite is licensed under [Creative Commons Attribution 4.0](https://creativecommons.org/licenses/by/4.0/).
+  
+  You must display: **"IP geolocation by [DB-IP](https://db-ip.com)"** on any page showing geo data.
+</Warning>
+
+#### Manual Download
+
+Alternatively, download directly:
+
+```bash
+wget https://download.db-ip.com/free/dbip-city-lite-$(date +%Y-%m).mmdb.gz
+gunzip dbip-city-lite-*.mmdb.gz
+mv dbip-city-lite-*.mmdb dbip-city-lite.mmdb
+```
+
+### Option 2: MaxMind GeoLite2 City
+
+MaxMind GeoLite2 is also free but requires account registration.
+
+<Steps>
+  <Step title="Create MaxMind account">
+    1. Sign up at [maxmind.com/en/geolite2/signup](https://www.maxmind.com/en/geolite2/signup)
+    2. Generate a license key in your account dashboard
+  </Step>
+  
+  <Step title="Download GeoLite2-City.mmdb">
+    ```bash
+    # Replace YOUR_LICENSE_KEY with your actual key
+    wget "https://download.maxmind.com/app/geoip_download?edition_id=GeoLite2-City&license_key=YOUR_LICENSE_KEY&suffix=tar.gz" -O GeoLite2-City.tar.gz
+    
+    tar -xzf GeoLite2-City.tar.gz
+    mv GeoLite2-City_*/GeoLite2-City.mmdb .
+    ```
+  </Step>
+  
+  <Step title="Configure Sparklytics">
+    ```bash
+    export SPARKLYTICS_GEOIP_PATH=./GeoLite2-City.mmdb
+    ```
+  </Step>
+</Steps>
+
+#### MaxMind License Terms
+
+<Note>
+  MaxMind GeoLite2 requires attribution and has usage restrictions. See [MaxMind's license terms](https://www.maxmind.com/en/geolite2/eula).
+</Note>
+
+## Configuration Reference
+
+<ParamField path="SPARKLYTICS_GEOIP_PATH" type="string" default="./GeoLite2-City.mmdb">
+  Path to MaxMind MMDB-format GeoIP database file.
+  
+  Supported databases:
+  - DB-IP City Lite (free, no registration)
+  - MaxMind GeoLite2 City (free, requires account)
+  - MaxMind GeoIP2 City (commercial)
+  
+  ```bash
+  # DB-IP (bare-metal)
+  SPARKLYTICS_GEOIP_PATH=./dbip-city-lite.mmdb
+  
+  # DB-IP (Docker, bundled)
+  SPARKLYTICS_GEOIP_PATH=/geoip/dbip-city-lite.mmdb
+  
+  # MaxMind GeoLite2
+  SPARKLYTICS_GEOIP_PATH=/path/to/GeoLite2-City.mmdb
+  ```
+</ParamField>
+
+### What Happens if the File is Missing?
+
+- Sparklytics **continues to run** normally
+- A warning is logged at startup
+- Geo fields in events are set to `NULL`:
+  - `country`
+  - `city`
+  - `region`
+- All other analytics features (pageviews, sessions, referrers, etc.) work unchanged
+
+## Docker Volume Mounting
+
+To use a custom GeoIP database with Docker:
+
+```yaml
+# docker-compose.yml
+version: '3.8'
+services:
+  sparklytics:
+    image: sparklytics/sparklytics:latest
+    ports:
+      - "3000:3000"
+    volumes:
+      - sparklytics-data:/data
+      - ./dbip-city-lite.mmdb:/geoip/custom-db.mmdb:ro
+    environment:
+      SPARKLYTICS_GEOIP_PATH: /geoip/custom-db.mmdb
+
+volumes:
+  sparklytics-data:
+```
+
+Mount as read-only (`:ro`) since Sparklytics only reads the file.
+
+## Updating the Database
+
+GeoIP databases should be updated monthly for accurate data.
+
+### Docker (Bundled Database)
+
+Pull the latest Sparklytics image:
+
+```bash
+docker pull sparklytics/sparklytics:latest
+docker stop sparklytics
+docker rm sparklytics
+# Re-run docker run or docker-compose up
+```
+
+### Bare-Metal
+
+<Steps>
+  <Step title="Download latest database">
+    ```bash
+    ./scripts/download-geoip.sh
+    ```
+    
+    Or manually download from [DB-IP](https://db-ip.com/db/download/ip-to-city-lite) or [MaxMind](https://www.maxmind.com/en/accounts/current/geoip/downloads).
+  </Step>
+  
+  <Step title="Replace old file">
+    ```bash
+    mv dbip-city-lite.mmdb /var/lib/sparklytics/dbip-city-lite.mmdb
+    ```
+  </Step>
+  
+  <Step title="Restart Sparklytics">
+    ```bash
+    systemctl restart sparklytics
+    # Or if running manually:
+    # pkill sparklytics && ./sparklytics
+    ```
+    
+    Sparklytics reloads the database file on startup.
+  </Step>
+</Steps>
+
+<Note>
+  You do not need to restart Sparklytics immediately after updating the file. The old database remains in memory until the next restart.
+</Note>
+
+### Automated Updates
+
+For production deployments, set up a monthly cron job:
+
+```bash
+# /etc/cron.monthly/update-geoip
+#!/bin/bash
+set -euo pipefail
+
+cd /opt/sparklytics
+./scripts/download-geoip.sh /var/lib/sparklytics/dbip-city-lite.mmdb
+systemctl restart sparklytics
+```
+
+Make it executable:
+
+```bash
+chmod +x /etc/cron.monthly/update-geoip
+```
+
+## Data Fields Enriched
+
+When GeoIP is configured, these fields are populated on every event:
+
+| Field | Type | Example |
+|-------|------|----------|
+| `country` | ISO 3166-1 alpha-2 | `US`, `GB`, `DE` |
+| `city` | String | `San Francisco`, `London` |
+| `region` | String | `California`, `England` |
+
+<Note>
+  Accuracy depends on the database. City-level data is ~70-80% accurate. Country-level is ~95%+.
+</Note>
+
+## Privacy Considerations
+
+Sparklytics does **not** store IP addresses. The GeoIP lookup happens in-memory during event ingestion:
+
+1. Event arrives at `/api/collect` with IP from request headers
+2. IP is hashed to generate a `visitor_id` (salted SHA-256)
+3. IP is looked up in the MMDB to extract geo data
+4. Geo fields are stored; **IP is discarded**
+5. IP never touches the database
+
+This design ensures compliance with privacy regulations (GDPR, CCPA) while still providing useful geographic insights.
+
+## Troubleshooting
+
+### "GeoIP database not found" Warning
+
+```
+[WARN] GeoIP database not found at ./GeoLite2-City.mmdb; geo fields will be NULL
+```
+
+**Solution:** Download a database and set `SPARKLYTICS_GEOIP_PATH`.
+
+### Geo Fields Are NULL Despite Configured Path
+
+1. **Check file permissions:**
+   ```bash
+   ls -l /path/to/database.mmdb
+   # Should be readable by the Sparklytics user
+   chmod 644 /path/to/database.mmdb
+   ```
+
+2. **Verify path is correct:**
+   ```bash
+   # Check Sparklytics logs for loaded path
+   docker logs sparklytics | grep GeoIP
+   ```
+
+3. **Test the MMDB file:**
+   ```bash
+   # Install mmdblookup (part of libmaxminddb)
+   apt-get install libmaxminddb-bin
+   
+   # Test lookup
+   mmdblookup --file dbip-city-lite.mmdb --ip 8.8.8.8
+   ```
+
+### Docker Container Can't Find Mounted Database
+
+```bash
+# Check volume is mounted
+docker exec sparklytics ls -l /geoip/
+
+# Verify environment variable inside container
+docker exec sparklytics printenv | grep GEOIP
+```
+
+If empty, ensure the volume mount and env var are in `docker-compose.yml` or `docker run` command.
+
+## Database Comparison
+
+| Database | License | Registration | Size | Accuracy |
+|----------|---------|--------------|------|----------|
+| DB-IP City Lite | CC BY 4.0 | No | ~50 MB | Good |
+| MaxMind GeoLite2 | Custom | Yes (free) | ~70 MB | Very Good |
+| MaxMind GeoIP2 City | Commercial | Yes (paid) | ~100 MB | Excellent |
+
+**Recommendation:** Use DB-IP City Lite for most self-hosted deployments. Upgrade to MaxMind if you need higher accuracy.
+
+## See Also
+
+- [Environment Variables](/configuration/environment-variables) — Full configuration reference
+- [DB-IP Attribution Requirements](https://db-ip.com/faq.php)
+- [MaxMind GeoLite2 EULA](https://www.maxmind.com/en/geolite2/eula)

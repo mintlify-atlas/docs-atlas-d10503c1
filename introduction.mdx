@@ -1,0 +1,137 @@
+---
+title: Welcome to Sparklytics
+description: Open-source, self-hosted web analytics that ships as a single Rust binary. Track pageviews, custom events, funnels, and retention with full data ownership.
+---
+
+## Your analytics, your infrastructure
+
+Sparklytics is a **privacy-first web analytics platform** that you can self-host in minutes. No Node.js runtime, no PostgreSQL setup, no Redis caching layer — just a single binary powered by embedded DuckDB.
+
+<CardGroup cols={2}>
+  <Card title="Quick Start" icon="rocket" href="/quickstart">
+    Deploy on your VPS and track your first event in under 5 minutes
+  </Card>
+  <Card title="Installation" icon="download" href="/installation">
+    Detailed installation guides for Docker, docker-compose, and binary deployments
+  </Card>
+  <Card title="Tracking Script" icon="code" href="/integrations/html-snippet">
+    Add the lightweight tracking snippet to your website
+  </Card>
+  <Card title="API Reference" icon="book" href="/api/overview">
+    Complete API documentation for analytics queries and event collection
+  </Card>
+</CardGroup>
+
+## What makes Sparklytics different
+
+### Single binary deployment
+
+No complex database setup required. Sparklytics embeds DuckDB directly — your entire analytics stack runs in one process.
+
+```bash
+# Download and run
+curl -O https://raw.githubusercontent.com/Sparklytics/sparklytics/main/docker-compose.yml
+docker compose up -d
+```
+
+Open `http://your-server-ip:3000` and you're ready to track events.
+
+### Privacy-first by design
+
+- **No cookies** — visitor tracking uses ephemeral daily IDs
+- **Full data ownership** — all analytics data stays on your infrastructure
+- **Configurable retention** — control how long raw events are stored
+- **Transparent visitor IDs** — `sha256(salt_epoch + ip + user_agent)` rotates daily at midnight UTC
+
+### Advanced analytics features
+
+<CardGroup cols={3}>
+  <Card title="Custom Events" icon="bolt">
+    Track user actions beyond pageviews with typed event properties
+  </Card>
+  <Card title="Funnels" icon="filter">
+    Measure conversion rates through multi-step user journeys
+  </Card>
+  <Card title="Retention Cohorts" icon="users">
+    Analyze user behavior over time with cohort analysis
+  </Card>
+  <Card title="Session Drilldown" icon="magnifying-glass">
+    Explore individual visitor sessions and navigation paths
+  </Card>
+  <Card title="Real-time Dashboard" icon="gauge">
+    Live visitor counts and recent events updated every few seconds
+  </Card>
+  <Card title="GeoIP Analytics" icon="globe">
+    Country, region, and city data from bundled DB-IP database
+  </Card>
+</CardGroup>
+
+## Performance at scale
+
+Benchmarked on Apple Silicon with 100k–1M realistic events:
+
+| Metric | Self-Hosted (DuckDB) |
+|--------|---------------------|
+| **Peak ingest throughput** | ~26,000 req/s (single event) |
+| **Batch ingestion** | ~74,800 events/s (batch of 10) |
+| **Memory (idle)** | ~29 MB |
+| **Storage per 1M events** | ~278 MB |
+| **Binary size** | ~15 MB |
+
+<Info>
+For cloud-scale deployments, Sparklytics supports ClickHouse as a backend — delivering **10–239x faster queries** at 100k–1M events with near-constant query performance.
+</Info>
+
+## Tech stack
+
+<CardGroup cols={2}>
+  <Card title="Backend" icon="server">
+    **Rust** with Axum 0.8 and Tokio async runtime
+  </Card>
+  <Card title="Storage" icon="database">
+    **DuckDB** embedded analytics database (no separate DB process)
+  </Card>
+  <Card title="Dashboard" icon="chart-line">
+    **Next.js 15** with TailwindCSS and shadcn/ui components
+  </Card>
+  <Card title="Authentication" icon="lock">
+    **Argon2id** password hashing with JWT HttpOnly cookies
+  </Card>
+</CardGroup>
+
+## Feature comparison
+
+| Feature | Sparklytics | Umami | Plausible |
+|---------|:-----------:|:-----:|:---------:|
+| Open source | ✅ MIT | ✅ MIT | ✅ AGPL |
+| Self-hostable | ✅ | ✅ | ✅ |
+| **Single binary** | ✅ | ❌ Node + DB | ❌ Elixir + DB |
+| No cookies | ✅ | ✅ | ✅ |
+| Custom events | ✅ | ✅ | ✅ |
+| **Funnels** | ✅ | ❌ | ❌ |
+| **Journey analysis** | ✅ | ❌ | ❌ |
+| **Retention cohorts** | ✅ | ❌ | ❌ |
+| Session drilldown | ✅ | ✅ | ❌ |
+| Real-time dashboard | ✅ | ✅ | ✅ |
+| GeoIP (bundled) | ✅ | ❌ | ✅ |
+| Next.js SDK | ✅ | ❌ | ❌ |
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Deploy in 5 minutes" icon="play" href="/quickstart">
+    Follow the quick start guide to get Sparklytics running
+  </Card>
+  <Card title="Installation options" icon="wrench" href="/installation">
+    Choose your deployment method: Docker, binary, or docker-compose
+  </Card>
+</CardGroup>
+
+## Open source
+
+Sparklytics is **MIT licensed** and developed in the open on GitHub.
+
+- **Repository:** [github.com/Sparklytics/sparklytics](https://github.com/Sparklytics/sparklytics)
+- **SDK:** [github.com/Sparklytics/sparklytics-next](https://github.com/Sparklytics/sparklytics-next)
+- **Issues:** Report bugs and request features on GitHub
+- **Contributing:** See [CONTRIBUTING.md](https://github.com/Sparklytics/sparklytics/blob/main/CONTRIBUTING.md)

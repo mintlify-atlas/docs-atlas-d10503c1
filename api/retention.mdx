@@ -1,0 +1,234 @@
+---
+title: 'Get Retention Cohorts'
+api: 'GET /api/websites/:id/retention'
+description: 'Retrieve cohort retention analysis showing how many visitors return over time, grouped by their first visit date.'
+---
+
+## Path Parameters
+
+<ParamField path="id" type="string" required>
+  Website ID
+</ParamField>
+
+## Query Parameters
+
+<ParamField query="start_date" type="string" required>
+  Start date in `YYYY-MM-DD` format.
+</ParamField>
+
+<ParamField query="end_date" type="string" required>
+  End date in `YYYY-MM-DD` format.
+</ParamField>
+
+<ParamField query="cohort_granularity" type="string" default="week">
+  Cohort grouping granularity: `day`, `week`, or `month`.
+</ParamField>
+
+<ParamField query="max_periods" type="integer">
+  Maximum number of retention periods to calculate. Defaults vary by granularity:
+  - `day`: 30 (max: 30)
+  - `week`: 8 (max: 12)
+  - `month`: 12 (max: 12)
+</ParamField>
+
+<ParamField query="timezone" type="string">
+  IANA timezone string (e.g., `America/New_York`). Required for accurate cohort boundary calculations.
+</ParamField>
+
+<ParamField query="include_bots" type="boolean">
+  Whether to include bot traffic in results. Defaults to website's bot policy setting.
+</ParamField>
+
+### Filter Parameters
+
+<ParamField query="filter_country" type="string">
+  ISO 3166-1 alpha-2 country code.
+</ParamField>
+
+<ParamField query="filter_page" type="string">
+  Filter by page URL path.
+</ParamField>
+
+<ParamField query="filter_referrer" type="string">
+  Filter by referrer domain.
+</ParamField>
+
+<ParamField query="filter_browser" type="string">
+  Filter by browser name.
+</ParamField>
+
+<ParamField query="filter_os" type="string">
+  Filter by operating system.
+</ParamField>
+
+<ParamField query="filter_device" type="string">
+  Filter by device type.
+</ParamField>
+
+<ParamField query="filter_language" type="string">
+  Filter by browser language.
+</ParamField>
+
+<ParamField query="filter_utm_source" type="string">
+  Filter by UTM source parameter.
+</ParamField>
+
+<ParamField query="filter_utm_medium" type="string">
+  Filter by UTM medium parameter.
+</ParamField>
+
+<ParamField query="filter_utm_campaign" type="string">
+  Filter by UTM campaign parameter.
+</ParamField>
+
+<ParamField query="filter_region" type="string">
+  Filter by geographic region/state.
+</ParamField>
+
+<ParamField query="filter_city" type="string">
+  Filter by city name.
+</ParamField>
+
+<ParamField query="filter_hostname" type="string">
+  Filter by hostname.
+</ParamField>
+
+## Response
+
+<ResponseField name="data" type="object">
+  Retention cohort analysis results.
+
+  <ResponseField name="granularity" type="string">
+    The cohort granularity used: `day`, `week`, or `month`.
+  </ResponseField>
+
+  <ResponseField name="max_periods" type="integer">
+    Maximum number of retention periods calculated.
+  </ResponseField>
+
+  <ResponseField name="rows" type="array">
+    Array of cohort rows, one per cohort period.
+
+    <ResponseField name="cohort_start" type="string">
+      Start date of the cohort period in `YYYY-MM-DD` format.
+    </ResponseField>
+
+    <ResponseField name="cohort_size" type="integer">
+      Number of unique visitors who first visited during this cohort period.
+    </ResponseField>
+
+    <ResponseField name="periods" type="array">
+      Retention data for each subsequent period.
+
+      <ResponseField name="offset" type="integer">
+        Period offset from cohort start (0 = same period, 1 = next period, etc.).
+      </ResponseField>
+
+      <ResponseField name="retained" type="integer">
+        Number of visitors from this cohort who returned during this period.
+      </ResponseField>
+
+      <ResponseField name="rate" type="number">
+        Retention rate as a percentage of the original cohort size (0-100).
+      </ResponseField>
+    </ResponseField>
+  </ResponseField>
+
+  <ResponseField name="summary" type="object">
+    Summary statistics across all cohorts.
+
+    <ResponseField name="avg_period1_rate" type="number">
+      Average retention rate for period 1 across all cohorts.
+    </ResponseField>
+
+    <ResponseField name="avg_period4_rate" type="number">
+      Average retention rate for period 4 across all cohorts (if applicable).
+    </ResponseField>
+  </ResponseField>
+</ResponseField>
+
+## Example Request
+
+```bash
+curl -X GET "https://analytics.example.com/api/websites/abc123/retention?start_date=2024-01-01&end_date=2024-03-07&cohort_granularity=week&max_periods=8&timezone=America/New_York" \
+  -H "Authorization: Bearer spk_live_your_api_key"
+```
+
+## Example Response
+
+```json
+{
+  "data": {
+    "granularity": "week",
+    "max_periods": 8,
+    "rows": [
+      {
+        "cohort_start": "2024-01-01",
+        "cohort_size": 1823,
+        "periods": [
+          { "offset": 0, "retained": 1823, "rate": 100.0 },
+          { "offset": 1, "retained": 542, "rate": 29.7 },
+          { "offset": 2, "retained": 321, "rate": 17.6 },
+          { "offset": 3, "retained": 234, "rate": 12.8 },
+          { "offset": 4, "retained": 198, "rate": 10.9 },
+          { "offset": 5, "retained": 176, "rate": 9.7 },
+          { "offset": 6, "retained": 154, "rate": 8.4 },
+          { "offset": 7, "retained": 142, "rate": 7.8 }
+        ]
+      },
+      {
+        "cohort_start": "2024-01-08",
+        "cohort_size": 2104,
+        "periods": [
+          { "offset": 0, "retained": 2104, "rate": 100.0 },
+          { "offset": 1, "retained": 623, "rate": 29.6 },
+          { "offset": 2, "retained": 389, "rate": 18.5 },
+          { "offset": 3, "retained": 271, "rate": 12.9 },
+          { "offset": 4, "retained": 223, "rate": 10.6 },
+          { "offset": 5, "retained": 192, "rate": 9.1 },
+          { "offset": 6, "retained": 168, "rate": 8.0 },
+          { "offset": 7, "retained": 0, "rate": 0.0 }
+        ]
+      },
+      {
+        "cohort_start": "2024-01-15",
+        "cohort_size": 1954,
+        "periods": [
+          { "offset": 0, "retained": 1954, "rate": 100.0 },
+          { "offset": 1, "retained": 571, "rate": 29.2 },
+          { "offset": 2, "retained": 342, "rate": 17.5 },
+          { "offset": 3, "retained": 248, "rate": 12.7 },
+          { "offset": 4, "retained": 209, "rate": 10.7 },
+          { "offset": 5, "retained": 183, "rate": 9.4 },
+          { "offset": 6, "retained": 0, "rate": 0.0 },
+          { "offset": 7, "retained": 0, "rate": 0.0 }
+        ]
+      }
+    ],
+    "summary": {
+      "avg_period1_rate": 29.5,
+      "avg_period4_rate": 10.7
+    }
+  }
+}
+```
+
+## Rate Limits
+
+This endpoint has stricter rate limits due to computational complexity:
+
+- Concurrent query limit enforced via semaphore (5 second wait timeout)
+- May return 429 with `Retry-After: 2` header if query times out
+
+## Notes
+
+- Retention is calculated based on unique visitors who return in subsequent periods
+- Period 0 always has 100% retention (the cohort itself)
+- A visitor is "retained" in a period if they have any activity during that period
+- The `cohort_start` date aligns to the start of the granularity period (Monday for weeks, 1st for months)
+- Summary statistics help identify overall retention trends
+- Timezone parameter is strongly recommended for accurate cohort boundaries
+- Periods beyond the available date range will show 0 retained visitors
+- Daily granularity is best for short-term retention analysis (7-30 days)
+- Weekly granularity is ideal for medium-term analysis (8-12 weeks)
+- Monthly granularity is best for long-term retention trends (up to 12 months)
