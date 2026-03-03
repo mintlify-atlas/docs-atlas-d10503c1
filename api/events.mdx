@@ -1,0 +1,175 @@
+---
+title: Events API
+description: Query custom event names, properties, and time series data
+---
+
+The Events API provides endpoints to analyze custom events tracked in your application.
+
+## Get event names
+
+`GET /api/websites/:id/events`
+
+Retrieve a list of all custom event names tracked for a website.
+
+### Path parameters
+
+<ParamField path="id" type="string" required>
+  Website ID (format: `site_XXXXXXXXXX`)
+</ParamField>
+
+### Query parameters
+
+<ParamField query="start_date" type="string">
+  Start date (YYYY-MM-DD). Defaults to 7 days ago.
+</ParamField>
+
+<ParamField query="end_date" type="string">
+  End date (YYYY-MM-DD). Defaults to today.
+</ParamField>
+
+<ParamField query="timezone" type="string">
+  Timezone for date range (e.g., `America/New_York`). Defaults to UTC.
+</ParamField>
+
+<ParamField query="include_bots" type="boolean">
+  Include bot traffic. Defaults to `false`.
+</ParamField>
+
+All standard filters are supported: `filter_country`, `filter_page`, `filter_referrer`, `filter_browser`, `filter_os`, `filter_device`, `filter_language`, `filter_utm_source`, `filter_utm_medium`, `filter_utm_campaign`, `filter_region`, `filter_city`, `filter_hostname`.
+
+<Note>
+  Maximum date range: 90 days
+</Note>
+
+### Response
+
+<ResponseField name="events" type="array">
+  Array of event name strings
+</ResponseField>
+
+### Example
+
+```bash
+curl -X GET "https://analytics.example.com/api/websites/site_abc123/events?start_date=2026-03-01&end_date=2026-03-07" \
+  -H "Authorization: Bearer spk_selfhosted_abc123..."
+```
+
+```json Response
+{
+  "events": [
+    "signup_click",
+    "purchase",
+    "video_play",
+    "form_submit"
+  ]
+}
+```
+
+## Get event properties
+
+`GET /api/websites/:id/events/properties`
+
+Retrieve event property keys and sample values for a specific event.
+
+### Query parameters
+
+<ParamField query="event_name" type="string" required>
+  Event name to query properties for
+</ParamField>
+
+All date range and filter parameters from the event names endpoint are also supported.
+
+### Response
+
+<ResponseField name="properties" type="object">
+  Object mapping property keys to arrays of sample values
+</ResponseField>
+
+### Example
+
+```bash
+curl -X GET "https://analytics.example.com/api/websites/site_abc123/events/properties?event_name=purchase" \
+  -H "Authorization: Bearer spk_selfhosted_abc123..."
+```
+
+```json Response
+{
+  "properties": {
+    "product": ["Pro Plan", "Team Plan", "Enterprise"],
+    "amount": ["29.99", "99.99", "299.99"],
+    "currency": ["USD", "EUR"]
+  }
+}
+```
+
+## Get event time series
+
+`GET /api/websites/:id/events/timeseries`
+
+Retrieve event counts over time for a specific event.
+
+### Query parameters
+
+<ParamField query="event_name" type="string" required>
+  Event name to query time series for
+</ParamField>
+
+<ParamField query="granularity" type="string">
+  Time bucket size: `hour`, `day`, `week`, `month`. Defaults to `day`.
+</ParamField>
+
+All date range and filter parameters are also supported.
+
+### Response
+
+<ResponseField name="series" type="array">
+  Array of time series data points
+  <Expandable title="properties">
+    <ResponseField name="timestamp" type="string">
+      ISO 8601 timestamp for the bucket
+    </ResponseField>
+    <ResponseField name="count" type="number">
+      Number of events in this time bucket
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+### Example
+
+```bash
+curl -X GET "https://analytics.example.com/api/websites/site_abc123/events/timeseries?event_name=signup_click&granularity=day" \
+  -H "Authorization: Bearer spk_selfhosted_abc123..."
+```
+
+```json Response
+{
+  "series": [
+    {"timestamp": "2026-03-01T00:00:00Z", "count": 45},
+    {"timestamp": "2026-03-02T00:00:00Z", "count": 52},
+    {"timestamp": "2026-03-03T00:00:00Z", "count": 38}
+  ]
+}
+```
+
+## Use cases
+
+<CardGroup cols={2}>
+  <Card title="Event Analytics Dashboard" icon="chart-line">
+    Build custom event dashboards showing trends for specific user actions
+  </Card>
+  <Card title="Property Analysis" icon="filter">
+    Analyze event properties to understand user behavior patterns
+  </Card>
+  <Card title="Conversion Tracking" icon="bullseye">
+    Track specific conversion events across different segments
+  </Card>
+  <Card title="Feature Adoption" icon="rocket">
+    Monitor adoption of new features via custom event tracking
+  </Card>
+</CardGroup>
+
+## Related endpoints
+
+- [Custom Events](/features/custom-events) - Feature documentation
+- [Funnels API](/api/funnels) - Multi-step conversion analysis
+- [Goals API](/api/goals) - Goal-based conversion tracking

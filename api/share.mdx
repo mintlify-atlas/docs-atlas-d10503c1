@@ -1,0 +1,130 @@
+---
+title: Share API
+description: Enable public dashboard sharing for websites
+---
+
+The Share API allows you to create publicly accessible dashboard links for your websites.
+
+## Enable sharing
+
+`POST /api/websites/:id/share`
+
+Enable public sharing for a website dashboard.
+
+### Path parameters
+
+<ParamField path="id" type="string" required>
+  Website ID (format: `site_XXXXXXXXXX`)
+</ParamField>
+
+### Response
+
+<ResponseField name="share_token" type="string">
+  Unique share token for the public dashboard
+</ResponseField>
+
+<ResponseField name="share_url" type="string">
+  Full public URL for the shared dashboard
+</ResponseField>
+
+### Example
+
+```bash
+curl -X POST "https://analytics.example.com/api/websites/site_abc123/share" \
+  -H "Authorization: Bearer spk_selfhosted_abc123..."
+```
+
+```json Response
+{
+  "share_token": "pub_xyz789abc",
+  "share_url": "https://analytics.example.com/share/pub_xyz789abc"
+}
+```
+
+## Disable sharing
+
+`DELETE /api/websites/:id/share`
+
+Disable public sharing and revoke the share token.
+
+### Path parameters
+
+<ParamField path="id" type="string" required>
+  Website ID
+</ParamField>
+
+### Response
+
+Returns `204 No Content` on success.
+
+### Example
+
+```bash
+curl -X DELETE "https://analytics.example.com/api/websites/site_abc123/share" \
+  -H "Authorization: Bearer spk_selfhosted_abc123..."
+```
+
+## Public dashboard access
+
+Once sharing is enabled, anyone with the share URL can view the dashboard without authentication.
+
+### Features available in shared dashboards
+
+- ✅ Real-time visitor count
+- ✅ Stats overview (pageviews, visitors, bounce rate, etc.)
+- ✅ Time series charts (pageviews over time)
+- ✅ Metrics breakdowns (pages, countries, browsers, etc.)
+- ❌ Goal statistics (not shown in public dashboards)
+- ❌ Event details (not shown in public dashboards)
+- ❌ Session drilldown (not shown in public dashboards)
+
+<Warning>
+  Shared dashboards are **publicly accessible** to anyone with the URL. Only enable sharing for websites where you're comfortable making analytics data public.
+</Warning>
+
+## Security considerations
+
+<AccordionGroup>
+  <Accordion title="Share token security">
+    - Share tokens are randomly generated 16-character alphanumeric strings
+    - Tokens are stored securely in the database
+    - Deleting a share immediately revokes access
+    - No rate limiting on public dashboard access (consider adding reverse proxy rate limits)
+  </Accordion>
+
+  <Accordion title="Data exposure">
+    Shared dashboards expose:
+    - Aggregate statistics (visitor counts, pageviews, bounce rates)
+    - Geographic distribution
+    - Browser/OS/device breakdown
+    - Top pages and referrers
+
+    Shared dashboards do NOT expose:
+    - Individual visitor IDs
+    - Session details
+    - Custom event data
+    - Goal conversion data
+  </Accordion>
+</AccordionGroup>
+
+## Use cases
+
+<CardGroup cols={2}>
+  <Card title="Public Transparency" icon="eye">
+    Share your website's analytics publicly to demonstrate transparency
+  </Card>
+  <Card title="Client Reporting" icon="chart-line">
+    Give clients view-only access to their website analytics
+  </Card>
+  <Card title="Team Collaboration" icon="users">
+    Share dashboards with stakeholders who don't need full access
+  </Card>
+  <Card title="Embed in Documentation" icon="code">
+    Embed public dashboards in your documentation or blog
+  </Card>
+</CardGroup>
+
+## Related features
+
+- [Real-time Analytics](/features/real-time-analytics) - See what data is available in dashboards
+- [Export API](/api/export) - Download raw event data instead of sharing

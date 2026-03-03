@@ -94,6 +94,8 @@
               "api/pageviews",
               "api/metrics",
               "api/realtime",
+              "api/events",
+              "api/sessions",
               "api/funnels",
               "api/retention",
               "api/journey"
@@ -104,7 +106,9 @@
             "pages": [
               "api/websites",
               "api/goals",
-              "api/api-keys"
+              "api/api-keys",
+              "api/share",
+              "api/export"
             ]
           }
         ]

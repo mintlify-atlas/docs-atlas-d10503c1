@@ -1,0 +1,245 @@
+---
+title: Sessions API
+description: List and retrieve detailed session information
+---
+
+The Sessions API provides endpoints to query and analyze user sessions.
+
+## List sessions
+
+`GET /api/websites/:id/sessions`
+
+Retrieve a paginated list of sessions for a website.
+
+### Path parameters
+
+<ParamField path="id" type="string" required>
+  Website ID (format: `site_XXXXXXXXXX`)
+</ParamField>
+
+### Query parameters
+
+<ParamField query="start_date" type="string">
+  Start date (YYYY-MM-DD). Defaults to 7 days ago.
+</ParamField>
+
+<ParamField query="end_date" type="string">
+  End date (YYYY-MM-DD). Defaults to today.
+</ParamField>
+
+<ParamField query="timezone" type="string">
+  Timezone for date range. Defaults to UTC.
+</ParamField>
+
+<ParamField query="cursor" type="string">
+  Pagination cursor from previous response
+</ParamField>
+
+<ParamField query="limit" type="number">
+  Number of sessions to return (max 100). Defaults to 50.
+</ParamField>
+
+<ParamField query="include_bots" type="boolean">
+  Include bot sessions. Defaults to `false`.
+</ParamField>
+
+All standard filters are supported: `filter_country`, `filter_page`, `filter_referrer`, `filter_browser`, `filter_os`, `filter_device`, `filter_language`, `filter_utm_source`, `filter_utm_medium`, `filter_utm_campaign`, `filter_region`, `filter_city`, `filter_hostname`.
+
+### Response
+
+<ResponseField name="sessions" type="array">
+  Array of session objects
+  <Expandable title="properties">
+    <ResponseField name="session_id" type="string">
+      Unique session identifier
+    </ResponseField>
+    <ResponseField name="visitor_id" type="string">
+      Visitor identifier (16 hex characters)
+    </ResponseField>
+    <ResponseField name="started_at" type="string">
+      Session start timestamp (ISO 8601)
+    </ResponseField>
+    <ResponseField name="ended_at" type="string">
+      Session end timestamp (ISO 8601)
+    </ResponseField>
+    <ResponseField name="duration" type="number">
+      Session duration in seconds
+    </ResponseField>
+    <ResponseField name="pageviews" type="number">
+      Number of pageviews in session
+    </ResponseField>
+    <ResponseField name="events" type="number">
+      Number of custom events in session
+    </ResponseField>
+    <ResponseField name="is_bounce" type="boolean">
+      Whether this was a bounce session (single pageview)
+    </ResponseField>
+    <ResponseField name="country" type="string">
+      Country code (2 letters)
+    </ResponseField>
+    <ResponseField name="browser" type="string">
+      Browser name
+    </ResponseField>
+    <ResponseField name="os" type="string">
+      Operating system
+    </ResponseField>
+    <ResponseField name="device" type="string">
+      Device type (desktop, mobile, tablet)
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="next_cursor" type="string">
+  Cursor for next page of results (null if no more results)
+</ResponseField>
+
+### Example
+
+```bash
+curl -X GET "https://analytics.example.com/api/websites/site_abc123/sessions?limit=10" \
+  -H "Authorization: Bearer spk_selfhosted_abc123..."
+```
+
+```json Response
+{
+  "sessions": [
+    {
+      "session_id": "sess_xyz789",
+      "visitor_id": "a1b2c3d4e5f6g7h8",
+      "started_at": "2026-03-03T10:15:00Z",
+      "ended_at": "2026-03-03T10:45:00Z",
+      "duration": 1800,
+      "pageviews": 5,
+      "events": 2,
+      "is_bounce": false,
+      "country": "US",
+      "browser": "Chrome",
+      "os": "macOS",
+      "device": "desktop"
+    }
+  ],
+  "next_cursor": "eyJpZCI6MTIzNDU2fQ=="
+}
+```
+
+## Get session details
+
+`GET /api/websites/:id/sessions/:session_id`
+
+Retrieve detailed information about a specific session, including all events.
+
+### Path parameters
+
+<ParamField path="id" type="string" required>
+  Website ID
+</ParamField>
+
+<ParamField path="session_id" type="string" required>
+  Session ID
+</ParamField>
+
+### Response
+
+<ResponseField name="session" type="object">
+  Session metadata (same fields as list endpoint)
+</ResponseField>
+
+<ResponseField name="events" type="array">
+  Array of all events in the session
+  <Expandable title="properties">
+    <ResponseField name="event_type" type="string">
+      `pageview` or `event`
+    </ResponseField>
+    <ResponseField name="timestamp" type="string">
+      Event timestamp (ISO 8601)
+    </ResponseField>
+    <ResponseField name="url" type="string">
+      Page URL (for pageviews)
+    </ResponseField>
+    <ResponseField name="event_name" type="string">
+      Event name (for custom events)
+    </ResponseField>
+    <ResponseField name="event_data" type="object">
+      Event properties (for custom events)
+    </ResponseField>
+    <ResponseField name="referrer" type="string">
+      Referrer URL (for first pageview)
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+### Example
+
+```bash
+curl -X GET "https://analytics.example.com/api/websites/site_abc123/sessions/sess_xyz789" \
+  -H "Authorization: Bearer spk_selfhosted_abc123..."
+```
+
+```json Response
+{
+  "session": {
+    "session_id": "sess_xyz789",
+    "visitor_id": "a1b2c3d4e5f6g7h8",
+    "started_at": "2026-03-03T10:15:00Z",
+    "ended_at": "2026-03-03T10:45:00Z",
+    "duration": 1800,
+    "pageviews": 5,
+    "events": 2,
+    "is_bounce": false,
+    "country": "US",
+    "browser": "Chrome",
+    "os": "macOS",
+    "device": "desktop"
+  },
+  "events": [
+    {
+      "event_type": "pageview",
+      "timestamp": "2026-03-03T10:15:00Z",
+      "url": "/",
+      "referrer": "https://google.com"
+    },
+    {
+      "event_type": "pageview",
+      "timestamp": "2026-03-03T10:16:30Z",
+      "url": "/pricing"
+    },
+    {
+      "event_type": "event",
+      "timestamp": "2026-03-03T10:17:00Z",
+      "event_name": "signup_click",
+      "event_data": {"plan": "pro"}
+    }
+  ]
+}
+```
+
+## Session timeout
+
+Sessions expire after **30 minutes of inactivity**. A new pageview or event after 30 minutes starts a new session.
+
+<Note>
+  Session IDs are generated server-side. No cookies or client-side session storage is used.
+</Note>
+
+## Use cases
+
+<CardGroup cols={2}>
+  <Card title="Session Replay" icon="play">
+    Build session replay features by reconstructing user journeys
+  </Card>
+  <Card title="Funnel Analysis" icon="filter">
+    Analyze session paths through your application
+  </Card>
+  <Card title="Engagement Metrics" icon="chart-line">
+    Calculate average session duration and pages per session
+  </Card>
+  <Card title="Behavior Patterns" icon="brain">
+    Identify common user behavior patterns and session flows
+  </Card>
+</CardGroup>
+
+## Related endpoints
+
+- [Sessions Feature](/features/sessions) - Feature documentation
+- [Journey API](/api/journey) - Path analysis
+- [Real-time API](/api/realtime) - Active sessions

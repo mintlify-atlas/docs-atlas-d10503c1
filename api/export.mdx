@@ -1,0 +1,181 @@
+---
+title: Export API
+description: Export raw event data in CSV or JSON format
+---
+
+The Export API allows you to download raw event data for backup, analysis, or integration with other tools.
+
+## Export events
+
+`GET /api/websites/:id/export`
+
+Export raw events for a website in CSV or JSON format.
+
+### Path parameters
+
+<ParamField path="id" type="string" required>
+  Website ID (format: `site_XXXXXXXXXX`)
+</ParamField>
+
+### Query parameters
+
+<ParamField query="start_date" type="string" required>
+  Start date (YYYY-MM-DD)
+</ParamField>
+
+<ParamField query="end_date" type="string" required>
+  End date (YYYY-MM-DD)
+</ParamField>
+
+<ParamField query="format" type="string">
+  Export format: `csv` or `json`. Defaults to `csv`.
+</ParamField>
+
+<ParamField query="timezone" type="string">
+  Timezone for timestamps. Defaults to UTC.
+</ParamField>
+
+<ParamField query="event_type" type="string">
+  Filter by event type: `pageview`, `event`, or omit for all events
+</ParamField>
+
+<ParamField query="include_bots" type="boolean">
+  Include bot traffic. Defaults to `false`.
+</ParamField>
+
+<Note>
+  Maximum date range: 90 days per export
+</Note>
+
+### Response
+
+Returns a file download with appropriate `Content-Type` header:
+- CSV: `text/csv; charset=utf-8`
+- JSON: `application/json`
+
+### CSV format
+
+```csv
+timestamp,event_type,url,event_name,event_data,visitor_id,session_id,country,region,city,browser,os,device,referrer,utm_source,utm_medium,utm_campaign
+2026-03-03T10:15:00Z,pageview,/,,,a1b2c3d4e5f6g7h8,sess_xyz789,US,CA,San Francisco,Chrome,macOS,desktop,https://google.com,,,
+2026-03-03T10:16:30Z,event,,signup_click,"{""plan"":""pro""}",a1b2c3d4e5f6g7h8,sess_xyz789,US,CA,San Francisco,Chrome,macOS,desktop,,,,
+```
+
+### JSON format
+
+```json
+[
+  {
+    "timestamp": "2026-03-03T10:15:00Z",
+    "event_type": "pageview",
+    "url": "/",
+    "event_name": null,
+    "event_data": null,
+    "visitor_id": "a1b2c3d4e5f6g7h8",
+    "session_id": "sess_xyz789",
+    "country": "US",
+    "region": "CA",
+    "city": "San Francisco",
+    "browser": "Chrome",
+    "os": "macOS",
+    "device": "desktop",
+    "referrer": "https://google.com",
+    "utm_source": null,
+    "utm_medium": null,
+    "utm_campaign": null
+  },
+  {
+    "timestamp": "2026-03-03T10:16:30Z",
+    "event_type": "event",
+    "url": null,
+    "event_name": "signup_click",
+    "event_data": {"plan": "pro"},
+    "visitor_id": "a1b2c3d4e5f6g7h8",
+    "session_id": "sess_xyz789",
+    "country": "US",
+    "region": "CA",
+    "city": "San Francisco",
+    "browser": "Chrome",
+    "os": "macOS",
+    "device": "desktop",
+    "referrer": null,
+    "utm_source": null,
+    "utm_medium": null,
+    "utm_campaign": null
+  }
+]
+```
+
+### Example
+
+```bash
+curl -X GET "https://analytics.example.com/api/websites/site_abc123/export?start_date=2026-03-01&end_date=2026-03-07&format=csv" \
+  -H "Authorization: Bearer spk_selfhosted_abc123..." \
+  -o events.csv
+```
+
+## Export limits
+
+<Warning>
+  Large exports can be memory-intensive. Consider these limits:
+  
+  - **Maximum 90 days** per export
+  - Exports with >1M events may take several minutes
+  - No pagination - entire date range is exported in one file
+  - No rate limiting, but exports are resource-intensive
+</Warning>
+
+### Recommended approach for large exports
+
+For websites with high traffic, export data in smaller chunks:
+
+```bash
+# Export one week at a time
+for week in {1..12}; do
+  start_date=$(date -d "2026-01-01 + $((week-1)) weeks" +%Y-%m-%d)
+  end_date=$(date -d "2026-01-01 + $week weeks" +%Y-%m-%d)
+  
+  curl -X GET "https://analytics.example.com/api/websites/site_abc123/export?start_date=$start_date&end_date=$end_date&format=csv" \
+    -H "Authorization: Bearer spk_selfhosted_abc123..." \
+    -o "events_week_$week.csv"
+  
+  sleep 5  # Rate limit yourself
+done
+```
+
+## Privacy considerations
+
+<Info>
+  Exported data includes visitor IDs, which are privacy-preserving hashes that rotate daily. Visitor IDs cannot be used to identify individual users across days.
+</Info>
+
+### GDPR compliance
+
+When exporting data:
+- Visitor IDs are anonymized hashes, not actual user identifiers
+- No personally identifiable information (PII) is stored or exported
+- IP addresses are never stored or exported
+- Consider your data retention obligations when exporting and storing data
+
+## Use cases
+
+<CardGroup cols={2}>
+  <Card title="Backup & Archive" icon="database">
+    Export historical data for long-term backup and archival
+  </Card>
+  <Card title="Custom Analysis" icon="chart-line">
+    Import into Excel, Tableau, or other analytics tools for custom analysis
+  </Card>
+  <Card title="Data Warehouse Integration" icon="warehouse">
+    Load event data into your data warehouse for cross-platform analysis
+  </Card>
+  <Card title="Machine Learning" icon="brain">
+    Use exported data for training ML models on user behavior
+  </Card>
+</CardGroup>
+
+## Related features
+
+- [Data Retention](/configuration/data-retention) - Configure how long data is kept
+- [Events API](/api/events) - Query events via API instead of exporting
+- [Share API](/api/share) - Share live dashboards instead of raw data
