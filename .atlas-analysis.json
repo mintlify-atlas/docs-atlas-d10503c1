@@ -1,0 +1,131 @@
+{
+  "projectType": "saas",
+  "projectName": "Sparklytics",
+  "projectDescription": "Open-source, self-hosted web analytics platform shipped as a single Rust binary with embedded DuckDB",
+  "theme": "palm",
+  "primaryColor": "#00D084",
+  "lightColor": "#00F5A0",
+  "darkColor": "#00A36B",
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Documentation",
+        "groups": [
+          {
+            "group": "Get Started",
+            "pages": [
+              "introduction",
+              "quickstart",
+              "installation"
+            ]
+          },
+          {
+            "group": "Core Features",
+            "pages": [
+              "features/real-time-analytics",
+              "features/custom-events",
+              "features/funnels",
+              "features/retention",
+              "features/sessions",
+              "features/journey-analysis"
+            ]
+          },
+          {
+            "group": "Integrations",
+            "pages": [
+              "integrations/html-snippet",
+              "integrations/nextjs-sdk",
+              "integrations/vue-sdk",
+              "integrations/custom-integration"
+            ]
+          },
+          {
+            "group": "Configuration",
+            "pages": [
+              "configuration/environment-variables",
+              "configuration/authentication",
+              "configuration/geoip-setup",
+              "configuration/data-retention"
+            ]
+          },
+          {
+            "group": "Self-Hosting",
+            "pages": [
+              "self-hosting/docker-deployment",
+              "self-hosting/reverse-proxy",
+              "self-hosting/https-setup",
+              "self-hosting/performance-tuning"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "API Reference",
+        "groups": [
+          {
+            "group": "Overview",
+            "pages": [
+              "api/overview",
+              "api/authentication"
+            ]
+          },
+          {
+            "group": "Event Collection",
+            "pages": [
+              "api/collect"
+            ]
+          },
+          {
+            "group": "Analytics",
+            "pages": [
+              "api/stats",
+              "api/pageviews",
+              "api/metrics",
+              "api/realtime",
+              "api/funnels",
+              "api/retention",
+              "api/journey"
+            ]
+          },
+          {
+            "group": "Website Management",
+            "pages": [
+              "api/websites",
+              "api/goals",
+              "api/api-keys"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "keyFeatures": [
+    "Single binary deployment with embedded DuckDB",
+    "Privacy-focused analytics without cookies",
+    "Real-time dashboard with live visitor tracking",
+    "Custom events and conversion funnels",
+    "Retention cohort analysis",
+    "Journey and session tracking",
+    "Multi-website support",
+    "First-class Next.js SDK integration",
+    "Flexible authentication modes (none/password/local)",
+    "GeoIP enrichment for location analytics"
+  ],
+  "publicApiSurface": [
+    "POST /api/collect - Event ingestion endpoint",
+    "GET /api/websites/:id/stats - Website statistics",
+    "GET /api/websites/:id/pageviews - Pageview time series",
+    "GET /api/websites/:id/metrics - Dimension breakdowns",
+    "GET /api/websites/:id/realtime - Live visitor data",
+    "GET /api/websites/:id/funnels - Funnel analysis",
+    "GET /api/websites/:id/retention - Retention cohorts",
+    "GET /api/websites/:id/journey - User journey analysis",
+    "GET /api/websites - List all websites",
+    "POST /api/websites - Create website",
+    "PUT /api/websites/:id - Update website",
+    "DELETE /api/websites/:id - Delete website",
+    "POST /api/auth/login - User authentication",
+    "POST /api/auth/setup - Initial setup",
+    "GET /health - Health check endpoint"
+  ]
+}
